@@ -40,7 +40,7 @@ async def main():
             '''
             # TODO: media, video ...
         with open('output.json', mode='w') as f:
-            json.dump(messages, f)
+            json.dump(messages, f, indent=4, sort_keys=True, default=str)
 
 
 app.run(main())
