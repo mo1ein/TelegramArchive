@@ -33,7 +33,7 @@ async def main():
             if message.video is not None:
                 msg_info['media_type'] = 'video_file'
                 msg_info['mime_type'] = message.video.mime_type
-                msg_info['duraction_seconds'] = message.video.duraction
+                msg_info['duration_seconds'] = message.video.duration
                 msg_info['width'] = message.video.width
                 msg_info['height'] = message.video.height
                 # msg_info['text'] =
@@ -44,7 +44,7 @@ async def main():
                 # performer
                 # title
                 msg_info['mime_type'] = message.audio.mime_type
-                msg_info['duraction_seconds'] = message.audio.duraction
+                msg_info['duration_seconds'] = message.audio.duration
                 # msg_info['text'] =
             elif message.sticker is not None:
                 msg_info['media_type'] = 'sticker'
@@ -56,12 +56,12 @@ async def main():
             elif message.voice is not None:
                 msg_info['media_type'] = 'voice_message'
                 msg_info['mime_type'] = message.voice.mime_type
-                msg_info['duraction_seconds'] = message.voice.duraction
+                msg_info['duration_seconds'] = message.voice.duration
                 # msg_info['text']
             elif message.video_note is not None:
                 msg_info['media_type'] = 'video_note'
                 msg_info['mime_type'] = message.video_note.mime_type
-                msg_info['duraction_seconds'] = message.video_note.duraction
+                msg_info['duration_seconds'] = message.video_note.duration
                 # msg_info['text']
             elif message.document is not None:
                 msg_info['media_type'] = 'document'
