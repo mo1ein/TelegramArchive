@@ -16,6 +16,7 @@ async def main():
     async with app:
         await app.send_message('me', 'ping!')
         messages = []
+        # https://github.com/eternnoir/pyTelegramBotAPI/issues/204
         async for message in app.get_chat_history(chat_ids):
             # print(message)
             print('clone!')
@@ -63,6 +64,7 @@ async def main():
                 msg_info['duration_seconds'] = message.video_note.duration
             elif message.document is not None:
                 msg_info['media_type'] = 'document'
+                # file
                 msg_info['mime_type'] = message.document.mime_type
             else:
                 # TODO
