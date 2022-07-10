@@ -1,4 +1,6 @@
+
 import json
+import datetime
 from pyrogram import Client
 from config import APP_ID, API_HASH
 
@@ -25,6 +27,7 @@ async def main():
             # TODO: type format should be str???
             msg_info['type'] = 'message'
             msg_info['date'] = message.date
+            msg_info['date_unixtime'] = convert_to_unixtime(message.date)
             # TODO: add date_unixtime
             if message.from_user.last_name is not None:
                 name = f'{message.from_user.first_name} {message.from_user.last_name}'
@@ -94,6 +97,16 @@ async def main():
             # TODO: media, video ...
         with open('output.json', mode='w') as f:
             json.dump(messages, f, indent=4, default=str)
+
+
+def convert_to_unixtime(date: str):
+    # telegram date format: "2022-07-10 08:49:23"
+    date_format = datetime.datetime.strptime(
+        date,
+        "%Y-%m-%d %H:%M:%S"
+    )
+    unix_time = datetime.datetime.timestamp(date_format)
+    return unix_time
 
 
 app.run(main())
