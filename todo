@@ -6,5 +6,6 @@
 [] - output pdf
 [] - get chat and backup for last chat or recently chat...
 [] - encode unicode for emojies in json not like this: \u223
+[] - add archive saved messages use "me" in id part
 
 [x] - output json
