@@ -1,9 +1,10 @@
 [] - good name for project
 [] - output media
 [] - if media or chat exist don't add for cron feature
-[] - output json
 [] - output html
 [] - output text
 [] - output pdf
 [] - get chat and backup for last chat or recently chat...
 [] - encode unicode for emojies in json not like this: \u223
+
+[x] - output json
