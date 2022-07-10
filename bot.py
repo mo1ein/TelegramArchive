@@ -18,7 +18,6 @@ async def main():
     async with app:
         await app.send_message('me', 'ping!')
         messages = []
-        # https://github.com/eternnoir/pyTelegramBotAPI/issues/204
         async for message in app.get_chat_history(chat_ids):
             # print(message)
             print('clone!')
@@ -36,6 +35,10 @@ async def main():
                 # TODO: for just last_name??
                 msg_info['from'] = message.from_user.first_name
             msg_info['from_id'] = f'user{message.from_user.id}'
+
+            # TODO: add file locations
+            msg_info['file'] = ''
+            msg_info['thumbnail'] = ''
 
             if message.forward_from_chat is not None:
                 msg_info['forwarded_from'] = message.forward_from_chat.title
@@ -75,10 +78,6 @@ async def main():
             else:
                 # TODO
                 pass
-
-            # TODO: add file locations
-            msg_info['file'] = ''
-            msg_info['thumbnail'] = ''
 
             # TODO: add hashtag and mention in text
             if message.text is not None:
