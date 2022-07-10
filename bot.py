@@ -18,14 +18,14 @@ chat_ids = 'mo_ein'
 async def main():
     async with app:
         await app.send_message('me', 'ping!')
-        user_info = await app.get_users(chat_ids)
-        chat_data = {}
-        '''
-        chat_data['name'] = user_info.first_name
-        chat_data['id'] = user_info.id
-        '''
         messages = []
-        print(user_info)
+        chat_data = {}
+        user_info = await app.get_users(chat_ids)
+        chat_data['name'] = user_info.first_name
+        # TODO: fix this for channels
+        chat_data['type'] = 'personal_chat'
+        chat_data['id'] = user_info.id
+        # print(user_info)
         async for message in app.get_chat_history(chat_ids):
             # print(message)
             print('clone!')
@@ -35,7 +35,7 @@ async def main():
             msg_info['type'] = 'message'
             msg_info['date'] = message.date
             msg_info['date_unixtime'] = convert_to_unixtime(message.date)
-            # TODO: add date_unixtime
+
             if message.from_user.last_name is not None:
                 name = f'{message.from_user.first_name} {message.from_user.last_name}'
                 msg_info['from'] = name
@@ -60,6 +60,7 @@ async def main():
                 msg_info['height'] = message.sticker.height
             elif message.video is not None:
                 # thumbnail
+                # file
                 msg_info['media_type'] = 'video_file'
                 msg_info['mime_type'] = message.video.mime_type
                 msg_info['duration_seconds'] = message.video.duration
@@ -91,19 +92,12 @@ async def main():
                 msg_info['text'] = message.text
             else:
                 msg_info['text'] = ""
-            messages.append(msg_info)
-            # chat_data['messages'] = messages
 
-            # TODO: find username or chat_id info instead of this
-            '''
-            username = message.from_user.username
-            if username != chat_ids or user_id != chat_ids:
-                # TODO: find your info first before loop
-                your_id = message.from_user.id
-            '''
-            # TODO: media, video ...
+            messages.append(msg_info)
+            chat_data['messages'] = messages
+
         with open('output.json', mode='w') as f:
-            json.dump(messages, f, indent=4, default=str)
+            json.dump(chat_data, f, indent=4, default=str)
 
 
 def convert_to_unixtime(date: datetime.datetime):
