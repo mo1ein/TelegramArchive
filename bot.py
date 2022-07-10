@@ -23,6 +23,9 @@ async def main():
         # print(chat)
         messages = []
         chat_data = {}
+        # TODO: choosed by user
+        download_media = {'document': True, 'audio': False, 'voice': False, 'video': False, 'photo': True}
+        path = ''
 
         if chat.type == ChatType.PRIVATE:
             user_info = await app.get_users(chat_ids)
@@ -39,6 +42,7 @@ async def main():
             # https://stackoverflow.com/questions/33858927/how-to-obtain-the-chat-id-of-a-private-telegram-channel
             if str(chat.id).startswith('-100'):
                 chat_data['id'] = str(chat.id)[4::]
+
 
         async for message in app.get_chat_history(chat_ids):
             # TODO: add initial message of channel
@@ -74,18 +78,25 @@ async def main():
             msg_info['thumbnail'] = ''
 
             if message.sticker is not None:
+                # TODO: dl
                 msg_info['media_type'] = 'sticker'
                 msg_info['sticker_emoji'] = message.sticker.emoji
                 msg_info['width'] = message.sticker.width
                 msg_info['height'] = message.sticker.height
             elif message.photo is not None:
-                # TODO: photo location
-                msg_info['photo'] = ''
+                if download_media['photo'] is True:
+                    await app.download_media(message.photo.file_id, message.photo.file_name)
+                    msg_info['photo'] = path + message.phot.file_name
+                else:
+                    msg_info['photo'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['width'] = message.sticker.width
                 msg_info['height'] = message.sticker.height
             elif message.video is not None:
-                # TODO: file location
-                msg_info['file'] = ''
+                if download_media['video'] is True:
+                    await app.download_media(message.video.file_id, message.video.file_name)
+                    msg_info['file'] = path + message.video.file_name
+                else:
+                    msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 # TODO: file thumbnail
                 msg_info['media_type'] = 'video_file'
                 msg_info['mime_type'] = message.video.mime_type
@@ -94,28 +105,43 @@ async def main():
                 msg_info['height'] = message.video.height
             elif message.video_note is not None:
                 # TODO: file location
-                msg_info['file'] = ''
+                msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 # TODO: file thumbnail
                 msg_info['media_type'] = 'video_note'
                 msg_info['mime_type'] = message.video_note.mime_type
                 msg_info['duration_seconds'] = message.video_note.duration
             elif message.audio is not None:
-                # TODO: file location
-                msg_info['file'] = ''
+                if download_media['audio'] is True:
+                    await app.download_media(message.audio.file_id, message.audio.file_name)
+                    msg_info['file'] = path + message.audio.file_name
+                else:
+                    msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['media_type'] = 'audio_file'
                 msg_info['performer'] = message.audio.performer
                 msg_info['title'] = message.audio.title
                 msg_info['mime_type'] = message.audio.mime_type
                 msg_info['duration_seconds'] = message.audio.duration
             elif message.voice is not None:
-                # TODO: file location
-                msg_info['file'] = ''
+                if download_media['voice'] is True:
+                    # TODO: correct names
+                    await app.download_media(message.voice.file_id, 'voice.ogg')
+                    msg_info['file'] = path + 'voice.ogg'
+                else:
+                    msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['media_type'] = 'voice_message'
                 msg_info['mime_type'] = message.voice.mime_type
                 msg_info['duration_seconds'] = message.voice.duration
-            else:
+            elif message.document is not None:
+                print(message)
+                if download_media['document'] is True:
+                    await app.download_media(message.document.file_id, message.document.file_name)
+                    msg_info['file'] = path + message.document.file_name
+                else:
+                    msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['media_type'] = 'document'
                 msg_info['mime_type'] = message.document.mime_type
+            else:
+                pass
 
             # TODO: reply_to_message
             # TODO: add hashtag
