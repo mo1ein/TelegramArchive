@@ -1,5 +1,6 @@
 
 import json
+import time
 import datetime
 from pyrogram import Client
 from config import APP_ID, API_HASH
@@ -98,13 +99,9 @@ async def main():
             json.dump(messages, f, indent=4, default=str)
 
 
-def convert_to_unixtime(date: str):
+def convert_to_unixtime(date: datetime.datetime):
     # telegram date format: "2022-07-10 08:49:23"
-    date_format = datetime.datetime.strptime(
-        date,
-        "%Y-%m-%d %H:%M:%S"
-    )
-    unix_time = datetime.datetime.timestamp(date_format)
+    unix_time = int(time.mktime(date.timetuple()))
     return unix_time
 
 
