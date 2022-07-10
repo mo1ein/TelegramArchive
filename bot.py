@@ -18,7 +18,14 @@ chat_ids = 'mo_ein'
 async def main():
     async with app:
         await app.send_message('me', 'ping!')
+        user_info = await app.get_users(chat_ids)
+        chat_data = {}
+        '''
+        chat_data['name'] = user_info.first_name
+        chat_data['id'] = user_info.id
+        '''
         messages = []
+        print(user_info)
         async for message in app.get_chat_history(chat_ids):
             # print(message)
             print('clone!')
@@ -37,16 +44,15 @@ async def main():
                 msg_info['from'] = message.from_user.first_name
             msg_info['from_id'] = f'user{message.from_user.id}'
 
-            # TODO: add file locations
-            msg_info['file'] = ''
-            msg_info['thumbnail'] = ''
-
             if message.forward_from_chat is not None:
                 msg_info['forwarded_from'] = message.forward_from_chat.title
             elif message.forward_from is not None:
                 msg_info['forwarded_from'] = message.forward_from.first_name
-            # file
-            # thumbnail
+
+            # TODO: add file locations
+            msg_info['file'] = ''
+            msg_info['thumbnail'] = ''
+
             if message.sticker is not None:
                 msg_info['media_type'] = 'sticker'
                 msg_info['sticker_emoji'] = message.sticker.emoji
@@ -86,6 +92,7 @@ async def main():
             else:
                 msg_info['text'] = ""
             messages.append(msg_info)
+            # chat_data['messages'] = messages
 
             # TODO: find username or chat_id info instead of this
             '''
@@ -103,6 +110,10 @@ def convert_to_unixtime(date: datetime.datetime):
     # telegram date format: "2022-07-10 08:49:23"
     unix_time = int(time.mktime(date.timetuple()))
     return unix_time
+
+
+def to_html():
+    pass
 
 
 app.run(main())
