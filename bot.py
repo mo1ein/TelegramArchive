@@ -20,18 +20,28 @@ async def main():
     async with app:
         await app.send_message('me', 'ping!')
         chat = await app.get_chat(chat_ids)
-        print(chat)
+        # print(chat)
         messages = []
         chat_data = {}
-        user_info = await app.get_users(chat_ids)
-        chat_data['name'] = user_info.first_name
-        # TODO: fix this for channels
-        chat_data['type'] = chat.type
-        chat_data['id'] = user_info.id
-        # print(user_info)
+
+        if chat.type == ChatType.PRIVATE:
+            user_info = await app.get_users(chat_ids)
+            # print(user_info)
+            chat_data['name'] = user_info.first_name
+            chat_data['type'] = chat.type
+            chat_data['id'] = user_info.id
+        elif chat.type == ChatType.CHANNEL:
+            chat_data['name'] = chat.title
+            chat_data['type'] = 'public_channel'
+            # print(chat)
+            # when using telegram api ids have -100 prefix
+            if str(chat.id).startswith('-100'):
+                chat_data['id'] = str(chat.id)[4::]
+
         async for message in app.get_chat_history(chat_ids):
+            # TODO: add initial message of channel
             # print(message)
-            print('clone!')
+            # print('clone!')
             msg_info = {}
             msg_info['id'] = message.id
             # TODO: type format should be str???
@@ -46,10 +56,11 @@ async def main():
                 if message.from_user.last_name is not None:
                     name += f' {message.from_user.last_name}'
                 msg_info['from'] = name
+                msg_info['from_id'] = f'user{message.from_user.id}'
             else:
                 msg_info['from'] = chat.title
-
-            msg_info['from_id'] = f'user{message.from_user.id}'
+                if str(message.sender_chat.id).startswith('-100'):
+                    msg_info['from_id'] = f'channel{str(message.sender_chat.id)[4::]}'
 
             if message.forward_from_chat is not None:
                 msg_info['forwarded_from'] = message.forward_from_chat.title
@@ -99,9 +110,9 @@ async def main():
                 msg_info['text'] = message.text
             else:
                 msg_info['text'] = ""
-
             messages.append(msg_info)
             chat_data['messages'] = messages
+            # TODO: reverse dic for start first message
 
         with open('output.json', mode='w') as f:
             json.dump(chat_data, f, indent=4, default=str)
