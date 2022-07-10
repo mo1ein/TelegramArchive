@@ -3,6 +3,7 @@ import json
 import time
 import datetime
 from pyrogram import Client
+from pyrogram.enums import ChatType
 from config import APP_ID, API_HASH
 
 app = Client(
@@ -18,12 +19,14 @@ chat_ids = 'mo_ein'
 async def main():
     async with app:
         await app.send_message('me', 'ping!')
+        chat = await app.get_chat(chat_ids)
+        print(chat)
         messages = []
         chat_data = {}
         user_info = await app.get_users(chat_ids)
         chat_data['name'] = user_info.first_name
         # TODO: fix this for channels
-        chat_data['type'] = 'personal_chat'
+        chat_data['type'] = chat.type
         chat_data['id'] = user_info.id
         # print(user_info)
         async for message in app.get_chat_history(chat_ids):
@@ -36,12 +39,16 @@ async def main():
             msg_info['date'] = message.date
             msg_info['date_unixtime'] = convert_to_unixtime(message.date)
 
-            if message.from_user.last_name is not None:
-                name = f'{message.from_user.first_name} {message.from_user.last_name}'
+            if chat.type != ChatType.CHANNEL:
+                name = ''
+                if message.from_user.first_name is not None:
+                    name += message.from_user.first_name
+                if message.from_user.last_name is not None:
+                    name += f' {message.from_user.last_name}'
                 msg_info['from'] = name
             else:
-                # TODO: for just last_name??
-                msg_info['from'] = message.from_user.first_name
+                msg_info['from'] = chat.title
+
             msg_info['from_id'] = f'user{message.from_user.id}'
 
             if message.forward_from_chat is not None:
