@@ -28,13 +28,15 @@ async def main():
             user_info = await app.get_users(chat_ids)
             # print(user_info)
             chat_data['name'] = user_info.first_name
-            chat_data['type'] = chat.type
+            chat_data['type'] = 'personal_chat'
             chat_data['id'] = user_info.id
         elif chat.type == ChatType.CHANNEL:
             chat_data['name'] = chat.title
             chat_data['type'] = 'public_channel'
             # print(chat)
+
             # when using telegram api ids have -100 prefix
+            # https://stackoverflow.com/questions/33858927/how-to-obtain-the-chat-id-of-a-private-telegram-channel
             if str(chat.id).startswith('-100'):
                 chat_data['id'] = str(chat.id)[4::]
 
@@ -76,43 +78,59 @@ async def main():
                 msg_info['sticker_emoji'] = message.sticker.emoji
                 msg_info['width'] = message.sticker.width
                 msg_info['height'] = message.sticker.height
+            elif message.photo is not None:
+                # TODO: photo location
+                msg_info['photo'] = ''
+                msg_info['width'] = message.sticker.width
+                msg_info['height'] = message.sticker.height
             elif message.video is not None:
-                # thumbnail
-                # file
+                # TODO: file location
+                msg_info['file'] = ''
+                # TODO: file thumbnail
                 msg_info['media_type'] = 'video_file'
                 msg_info['mime_type'] = message.video.mime_type
                 msg_info['duration_seconds'] = message.video.duration
                 msg_info['width'] = message.video.width
                 msg_info['height'] = message.video.height
             elif message.video_note is not None:
+                # TODO: file location
+                msg_info['file'] = ''
+                # TODO: file thumbnail
                 msg_info['media_type'] = 'video_note'
                 msg_info['mime_type'] = message.video_note.mime_type
                 msg_info['duration_seconds'] = message.video_note.duration
             elif message.audio is not None:
+                # TODO: file location
+                msg_info['file'] = ''
                 msg_info['media_type'] = 'audio_file'
                 msg_info['performer'] = message.audio.performer
                 msg_info['title'] = message.audio.title
                 msg_info['mime_type'] = message.audio.mime_type
                 msg_info['duration_seconds'] = message.audio.duration
             elif message.voice is not None:
+                # TODO: file location
+                msg_info['file'] = ''
                 msg_info['media_type'] = 'voice_message'
                 msg_info['mime_type'] = message.voice.mime_type
                 msg_info['duration_seconds'] = message.voice.duration
-            elif message.document is not None:
+            else:
                 msg_info['media_type'] = 'document'
                 msg_info['mime_type'] = message.document.mime_type
-            else:
-                # TODO
-                pass
 
-            # TODO: add hashtag and mention in text
+            # TODO: reply_to_message
+            # TODO: add hashtag
+            # TODO: add mentions
+            # TODO: add links, hrefs...
+
             if message.text is not None:
                 msg_info['text'] = message.text
             else:
                 msg_info['text'] = ""
+
             messages.append(msg_info)
+            # for start first message in json
+            messages.reverse()
             chat_data['messages'] = messages
-            # TODO: reverse dic for start first message
 
         with open('output.json', mode='w') as f:
             json.dump(chat_data, f, indent=4, default=str)
