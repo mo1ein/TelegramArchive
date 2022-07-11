@@ -24,6 +24,7 @@ async def main():
         # print(chat)
 
         voice_num = 0
+        photo_num = 0
         video_message_num = 0
         messages = []
         chat_data = {}
@@ -111,13 +112,16 @@ async def main():
                 msg_info['height'] = message.sticker.height
             elif message.photo is not None:
                 if DOWNLOAD_MEDIA['photo'] is True:
+                    photo_num += 1
                     os.makedirs(f'{chat_export_name}/photos', exist_ok=True)
-                    photo_name = f'{chat_export_name}/photos/{message.photo.file_name}'
+                    date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+                    # TODO: what format for png??
+                    photo_name = f'{chat_export_name}/photos/file_{photo_num}@{date}.jpg'
                     await app.download_media(
                         message.photo.file_id,
                         photo_name
                     )
-                    msg_info['photo'] = f'photos/{message.photo.file_name}'
+                    msg_info['photo'] = f'photos/file_{photo_num}@{date}.jpg'
                 else:
                     msg_info['photo'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['width'] = message.sticker.width
