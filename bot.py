@@ -47,7 +47,7 @@ async def main():
 
         chat_export_date = datetime.now().strftime("%Y-%m-%d")
         # TODO: use username instead of name
-        chat_export_name = f'ChatExport_{chat_export_date}_{chat_data["name"]}'
+        chat_export_name = f'ChatExport_{chat_data["name"]}_{chat_export_date}'
         # TODO: when user want other path
         path = ''
 
@@ -124,11 +124,11 @@ async def main():
                     msg_info['photo'] = f'photos/file_{photo_num}@{date}.jpg'
                 else:
                     msg_info['photo'] = "(File not included. Change data exporting settings to download.)"
-                msg_info['width'] = message.sticker.width
-                msg_info['height'] = message.sticker.height
+                msg_info['width'] = message.photo.width
+                msg_info['height'] = message.photo.height
             elif message.video is not None:
                 if DOWNLOAD_MEDIA['video'] is True:
-                    media_dir = f'{chat_export_name}/video_files',
+                    media_dir = f'{chat_export_name}/video_files'
                     os.makedirs(
                         media_dir,
                         exist_ok=True

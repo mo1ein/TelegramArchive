@@ -5,10 +5,10 @@ API_HASH = os.environ.get("API_HASH")
 
 DOWNLOAD_MEDIA = {
     'audio': False,
-    'video': False,
+    'video': True,
     'photo': True,
-    'sticker': True,
-    'document': True,
-    'voice_message': True,
-    'video_message': True
+    'sticker': False,
+    'document': False,
+    'voice_message': False,
+    'video_message': False
 }
