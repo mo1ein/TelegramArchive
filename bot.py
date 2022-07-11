@@ -34,6 +34,7 @@ async def main():
              'video_message': True
         }
         path = ''
+        voice_num = 0
         # folders: voice_messages, video_files, 
 
         if chat.type == ChatType.PRIVATE:
@@ -61,7 +62,8 @@ async def main():
             msg_info['id'] = message.id
             # TODO: type format should be str???
             msg_info['type'] = 'message'
-            msg_info['date'] = message.date
+            # TODO: correct date
+            msg_info['date'] = message.date.strftime('%Y-%m-%dT%H:%M:%S')
             msg_info['date_unixtime'] = convert_to_unixtime(message.date)
 
             if chat.type != ChatType.CHANNEL:
@@ -160,13 +162,16 @@ async def main():
                 msg_info['mime_type'] = message.audio.mime_type
                 msg_info['duration_seconds'] = message.audio.duration
             elif message.voice is not None:
+                # TODO: voice_num is not correct because we read messages last to first
+                voice_num += 1
                 if download_media['voice'] is True:
-                    # TODO: correct names
+                    date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+                    voice_name = f'audio_{voice_num}@{date}.ogg'
                     await app.download_media(
                         message.voice.file_id, 
-                        'voice.ogg'
+                        voice_name
                     )
-                    msg_info['file'] = path + 'voice.ogg'
+                    msg_info['file'] = path + voice_name
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['media_type'] = 'voice_message'
