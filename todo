@@ -1,11 +1,19 @@
-[] - output media
-[] - if media or chat exist don't add for cron feature
+
+[] - if files not dl exception
+[] - voice and video messages number is reversed
+[] - hashtags in text
+[] - media_type in doc??
+[] - change download_media name
+
 [] - output html
 [] - output pdf
 [] - output text
-[] - get chat and backup for last chat or recently chat...
+[] - get recently chats
 [] - encode unicode for emojies in json not like this: \u223
 [] - add archive saved messages use "me" in id part
+[] - if media or chat exist don't add for cron feature
 [] - good name for project
 
+[x] - get chat and backup for last chat or recently chat...
+[x] - output media
 [x] - output json
