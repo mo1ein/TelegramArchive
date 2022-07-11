@@ -22,20 +22,19 @@ async def main():
         await app.send_message('me', 'ping!')
         chat = await app.get_chat(chat_ids)
         # print(chat)
-        messages = []
-        chat_data = {}
 
         # TODO: choosed by user
         download_media = {
             'document': False,
-             'audio': False, 
-             'voice': False,
-             'video': False, 
-             'photo': True, 
-             'video_message': True
+            'audio': False,
+            'voice': False,
+            'video': False,
+            'photo': True,
+            'video_message': True
         }
-        path = ''
         voice_num = 0
+        messages = []
+        chat_data = {}
 
         if chat.type == ChatType.PRIVATE:
             user_info = await app.get_users(chat_ids)
@@ -53,6 +52,11 @@ async def main():
             if str(chat.id).startswith('-100'):
                 chat_data['id'] = str(chat.id)[4::]
 
+        chat_export_date = datetime.now().strftime("%Y-%m-%d")
+        # TODO: use username instead of name
+        chat_export_name = f'ChatExport_{chat_export_date}_{chat_data["name"]}'
+        # TODO: when user want other path
+        path = ''
 
         async for message in app.get_chat_history(chat_ids):
             # TODO: add initial message of channel
@@ -83,7 +87,7 @@ async def main():
                     msg_info['from_id'] = f'channel{str(message.sender_chat.id)[4::]}'
 
             if message.reply_to_message_id is not None:
-                msg_info['reply_to_message_id'] = reply_to_message_id
+                msg_info['reply_to_message_id'] = message.reply_to_message_id
 
             if message.forward_from_chat is not None:
                 msg_info['forwarded_from'] = message.forward_from_chat.title
@@ -92,16 +96,16 @@ async def main():
 
             if message.sticker is not None:
                 if download_media['sticker'] is True:
-                    if not os.path.exists('./stickers'):
-                        os.mkdir('./stickers')
-                    sticker_name = f'stickers/{message.sticer.file_name}'
+                    media_dir = f'{chat_export_name}/stickers'
+                    os.makedirs(media_dir, exist_ok=True)
+                    sticker_name = f'{media_dir}/{message.sticer.file_name}'
                     await app.download_media(
-                        message.sticker.file_id, 
+                        message.sticker.file_id,
                         sticker_name
                     )
-                    thumbnail_name = f'stickers/{message.sticker.file_name}_thumb.jpg'
+                    thumbnail_name = f'{media_dir}/{message.sticker.file_name}_thumb.jpg'
                     await app.download_media(
-                        message.sticker.thumbs.file_id, 
+                        message.sticker.thumbs.file_id,
                         thumbnail_name
                     )
                     msg_info['file'] = sticker_name
@@ -115,12 +119,10 @@ async def main():
                 msg_info['height'] = message.sticker.height
             elif message.photo is not None:
                 if download_media['photo'] is True:
-                    # TODO: correct file names
-                    if not os.path.exists('photos'):
-                        os.mkdir('photos')
-                    photo_name = f'photos/{message.video.file_name}'
+                    os.makedirs(f'{chat_export_name}/photos', exist_ok=True)
+                    photo_name = f'{chat_export_name}/photos/{message.video.file_name}'
                     await app.download_media(
-                        message.photo.file_id, 
+                        message.photo.file_id,
                         photo_name
                     )
                     msg_info['photo'] = photo_name
@@ -130,17 +132,19 @@ async def main():
                 msg_info['height'] = message.sticker.height
             elif message.video is not None:
                 if download_media['video'] is True:
-                    # TODO: correct file names
-                    if not os.path.exists('video_files'):
-                        os.mkdir('video_files')
-                    video_name = f'video_files/{message.video.file_name}'
+                    media_dir = f'{chat_export_name}/video_files',
+                    os.makedirs(
+                        media_dir,
+                        exist_ok=True
+                    )
+                    video_name = f'{media_dir}/{message.video.file_name}'
                     await app.download_media(
-                        message.video.file_id, 
+                        message.video.file_id,
                         video_name
                     )
-                    thumbnail_name = f'video_files/{message.video.file_name}_thumb.jpg'
+                    thumbnail_name = f'{media_dir}/{message.video.file_name}_thumb.jpg'
                     await app.download_media(
-                        message.video.thumbs.file_id, 
+                        message.video.thumbs.file_id,
                         thumbnail_name
                     )
                     msg_info['file'] = video_name
@@ -156,19 +160,20 @@ async def main():
             # TODO: media_type animation
             elif message.video_note is not None:
                 if download_media['video_message'] is True:
-                    # TODO: correct file names
-                    if not os.path.exists('video_messages'):
-                        os.mkdir('video_messages')
-                    video_message_name = f'video_messages/{message.video_note.file_name}'
+                    media_dir = f'{chat_export_name}/round_video_messages'
+                    os.makedirs(
+                        media_dir,
+                        exist_ok=True
+                    )
+                    video_message_name = f'{media_dir}/{message.video_note.file_name}'
                     # TODO: if not downloaded??
                     await app.download_media(
-                        message.video_note.file_id, 
+                        message.video_note.file_id,
                         video_message_name
                     )
-
-                    thumbnail_name = f'{path}{message.video_note.file_name}_thumb.jpg'
+                    thumbnail_name = f'{media_dir}/{message.video_note.file_name}_thumb.jpg'
                     await app.download_media(
-                        message.video_note.thumbs.file_id, 
+                        message.video_note.thumbs.file_id,
                         thumbnail_name
                     )
                     msg_info['file'] = video_message_name
@@ -181,12 +186,14 @@ async def main():
                 msg_info['duration_seconds'] = message.video_note.duration
             elif message.audio is not None:
                 if download_media['audio'] is True:
-                    # TODO: correct file names
-                    if not os.path.exists('audio_files'):
-                        os.mkdir('audio_files')
-                    audio_name = f'audio_files/{message.audio.file_name}'
+                    media_dir = f'{chat_export_name}/files'
+                    os.makedirs(
+                        media_dir,
+                        exist_ok=True
+                    )
+                    audio_name = f'{media_dir}/{message.audio.file_name}'
                     await app.download_media(
-                        message.audio.file_id, 
+                        message.audio.file_id,
                         audio_name
                     )
                     msg_info['file'] = audio_name
@@ -201,12 +208,15 @@ async def main():
                 # TODO: voice_num is not correct because we read messages last to first
                 voice_num += 1
                 if download_media['voice'] is True:
-                    if not os.path.exists('voice_messages'):
-                        os.mkdir('voice_messages')
+                    media_dir = f'{chat_export_name}/voice_messages'
+                    os.makedirs(
+                        media_dir,
+                        exist_ok=True
+                    )
                     date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-                    voice_name = f'voice_messages/audio_{voice_num}@{date}.ogg'
+                    voice_name = f'{media_dir}/audio_{voice_num}@{date}.ogg'
                     await app.download_media(
-                        message.voice.file_id, 
+                        message.voice.file_id,
                         voice_name
                     )
                     msg_info['file'] = voice_name
@@ -217,17 +227,16 @@ async def main():
                 msg_info['duration_seconds'] = message.voice.duration
             elif message.document is not None:
                 if download_media['document'] is True:
-                    # TODO: correct dir name
-                    if not os.path.exists('documents'):
-                        os.mkdir('documents')
-                    doc_name = f'documents/{message.document.file_name}'
+                    media_dir = f'{chat_export_name}/files'
+                    os.makedirs(media_dir, exist_ok=True)
+                    doc_name = f'{media_dir}/{message.document.file_name}'
                     await app.download_media(
-                        message.document.file_id, 
+                        message.document.file_id,
                         doc_name
                     )
-                    thumbnail_name = f'{documents}{message.document.file_name}_thumb.jpg'
+                    thumbnail_name = f'{media_dir}/{message.document.file_name}_thumb.jpg'
                     await app.download_media(
-                        message.document.thumbs.file_id, 
+                        message.document.thumbs.file_id,
                         thumbnail_name
                     )
                     msg_info['file'] = doc_name
@@ -235,10 +244,9 @@ async def main():
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                     msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
-                msg_info['media_type'] = 'document'
+                # msg_info['media_type'] = 'document'
                 msg_info['mime_type'] = message.document.mime_type
 
-            # TODO: reply_to_message
             # TODO: add hashtag
             # TODO: add mentions
             # TODO: add links, hrefs...
