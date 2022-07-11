@@ -33,9 +33,10 @@ async def main():
              'photo': True, 
              'video_message': True
         }
+        dirs = ['stickers', 'voice_messages', 'video_files']
         path = ''
         voice_num = 0
-        # folders: voice_messages, video_files, 
+        # folders: voice_messages, video_files, stickers 
 
         if chat.type == ChatType.PRIVATE:
             user_info = await app.get_users(chat_ids)
@@ -88,7 +89,21 @@ async def main():
                 msg_info['forwarded_from'] = message.forward_from.first_name
 
             if message.sticker is not None:
-                # TODO: dl
+                if download_media['sticker'] is True:
+                    await app.download_media(
+                        message.sticker.file_id, 
+                        message.sticker.file_name
+                    )
+                    thumbnail_name = f'{path}{message.sticker.file_name}_thumb.jpg'
+                    await app.download_media(
+                        message.sticker.thumbs.file_id, 
+                        thumbnail_name
+                    )
+                    msg_info['file'] = path + message.sticker.file_name
+                    msg_info['thumbnail'] = thumbnail_name
+                else:
+                    msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+                    msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['media_type'] = 'sticker'
                 msg_info['sticker_emoji'] = message.sticker.emoji
                 msg_info['width'] = message.sticker.width
