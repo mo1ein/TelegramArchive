@@ -1,4 +1,5 @@
 
+import os
 import json
 import time
 import datetime
@@ -33,10 +34,8 @@ async def main():
              'photo': True, 
              'video_message': True
         }
-        dirs = ['stickers', 'voice_messages', 'video_files']
         path = ''
         voice_num = 0
-        # folders: voice_messages, video_files, stickers 
 
         if chat.type == ChatType.PRIVATE:
             user_info = await app.get_users(chat_ids)
@@ -83,6 +82,9 @@ async def main():
                 if str(message.sender_chat.id).startswith('-100'):
                     msg_info['from_id'] = f'channel{str(message.sender_chat.id)[4::]}'
 
+            if message.reply_to_message_id is not None:
+                msg_info['reply_to_message_id'] = reply_to_message_id
+
             if message.forward_from_chat is not None:
                 msg_info['forwarded_from'] = message.forward_from_chat.title
             elif message.forward_from is not None:
@@ -90,16 +92,19 @@ async def main():
 
             if message.sticker is not None:
                 if download_media['sticker'] is True:
+                    if not os.path.exists('./stickers'):
+                        os.mkdir('./stickers')
+                    sticker_name = f'stickers/{message.sticer.file_name}'
                     await app.download_media(
                         message.sticker.file_id, 
-                        message.sticker.file_name
+                        sticker_name
                     )
-                    thumbnail_name = f'{path}{message.sticker.file_name}_thumb.jpg'
+                    thumbnail_name = f'stickers/{message.sticker.file_name}_thumb.jpg'
                     await app.download_media(
                         message.sticker.thumbs.file_id, 
                         thumbnail_name
                     )
-                    msg_info['file'] = path + message.sticker.file_name
+                    msg_info['file'] = sticker_name
                     msg_info['thumbnail'] = thumbnail_name
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
@@ -110,27 +115,35 @@ async def main():
                 msg_info['height'] = message.sticker.height
             elif message.photo is not None:
                 if download_media['photo'] is True:
+                    # TODO: correct file names
+                    if not os.path.exists('photos'):
+                        os.mkdir('photos')
+                    photo_name = f'photos/{message.video.file_name}'
                     await app.download_media(
                         message.photo.file_id, 
-                        message.photo.file_name
+                        photo_name
                     )
-                    msg_info['photo'] = path + message.photo.file_name
+                    msg_info['photo'] = photo_name
                 else:
                     msg_info['photo'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['width'] = message.sticker.width
                 msg_info['height'] = message.sticker.height
             elif message.video is not None:
                 if download_media['video'] is True:
+                    # TODO: correct file names
+                    if not os.path.exists('video_files'):
+                        os.mkdir('video_files')
+                    video_name = f'video_files/{message.video.file_name}'
                     await app.download_media(
                         message.video.file_id, 
-                        message.video.file_name
+                        video_name
                     )
-                    thumbnail_name = f'{path}{message.video.file_name}_thumb.jpg'
+                    thumbnail_name = f'video_files/{message.video.file_name}_thumb.jpg'
                     await app.download_media(
                         message.video.thumbs.file_id, 
                         thumbnail_name
                     )
-                    msg_info['file'] = path + message.video.file_name
+                    msg_info['file'] = video_name
                     msg_info['thumbnail'] = thumbnail_name
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
@@ -143,10 +156,14 @@ async def main():
             # TODO: media_type animation
             elif message.video_note is not None:
                 if download_media['video_message'] is True:
+                    # TODO: correct file names
+                    if not os.path.exists('video_messages'):
+                        os.mkdir('video_messages')
+                    video_message_name = f'video_messages/{message.video_note.file_name}'
                     # TODO: if not downloaded??
                     await app.download_media(
                         message.video_note.file_id, 
-                        message.video_note.file_name
+                        video_message_name
                     )
 
                     thumbnail_name = f'{path}{message.video_note.file_name}_thumb.jpg'
@@ -154,7 +171,7 @@ async def main():
                         message.video_note.thumbs.file_id, 
                         thumbnail_name
                     )
-                    msg_info['file'] = path + message.video_note.file_name
+                    msg_info['file'] = video_message_name
                     msg_info['thumbnail'] = thumbnail_name
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
@@ -164,11 +181,15 @@ async def main():
                 msg_info['duration_seconds'] = message.video_note.duration
             elif message.audio is not None:
                 if download_media['audio'] is True:
+                    # TODO: correct file names
+                    if not os.path.exists('audio_files'):
+                        os.mkdir('audio_files')
+                    audio_name = f'audio_files/{message.audio.file_name}'
                     await app.download_media(
                         message.audio.file_id, 
-                        message.audio.file_name
+                        audio_name
                     )
-                    msg_info['file'] = path + message.audio.file_name
+                    msg_info['file'] = audio_name
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['media_type'] = 'audio_file'
@@ -180,13 +201,15 @@ async def main():
                 # TODO: voice_num is not correct because we read messages last to first
                 voice_num += 1
                 if download_media['voice'] is True:
+                    if not os.path.exists('voice_messages'):
+                        os.mkdir('voice_messages')
                     date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-                    voice_name = f'audio_{voice_num}@{date}.ogg'
+                    voice_name = f'voice_messages/audio_{voice_num}@{date}.ogg'
                     await app.download_media(
                         message.voice.file_id, 
                         voice_name
                     )
-                    msg_info['file'] = path + voice_name
+                    msg_info['file'] = voice_name
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['media_type'] = 'voice_message'
@@ -194,25 +217,26 @@ async def main():
                 msg_info['duration_seconds'] = message.voice.duration
             elif message.document is not None:
                 if download_media['document'] is True:
+                    # TODO: correct dir name
+                    if not os.path.exists('documents'):
+                        os.mkdir('documents')
+                    doc_name = f'documents/{message.document.file_name}'
                     await app.download_media(
                         message.document.file_id, 
-                        message.document.file_name
+                        doc_name
                     )
-                    thumbnail_name = f'{path}{message.document.file_name}_thumb.jpg'
+                    thumbnail_name = f'{documents}{message.document.file_name}_thumb.jpg'
                     await app.download_media(
                         message.document.thumbs.file_id, 
                         thumbnail_name
                     )
-                    msg_info['file'] = path + message.document.file_name
+                    msg_info['file'] = doc_name
                     msg_info['thumbnail'] = thumbnail_name
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                     msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['media_type'] = 'document'
                 msg_info['mime_type'] = message.document.mime_type
-            else:
-                # there is no media in message!
-                pass
 
             # TODO: reply_to_message
             # TODO: add hashtag
