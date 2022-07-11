@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 from pyrogram import Client
 from pyrogram.enums import ChatType
-from config import APP_ID, API_HASH
+from config import APP_ID, API_HASH, DOWNLOAD_MEDIA
 
 app = Client(
     "my_bot",
@@ -23,16 +23,6 @@ async def main():
         chat = await app.get_chat(chat_ids)
         # print(chat)
 
-        # TODO: choosed by user
-        download_media = {
-            'audio': False,
-            'video': False,
-            'photo': True,
-            'sticker': True,
-            'document': True,
-            'voice_message': True,
-            'video_message': True
-        }
         voice_num = 0
         video_message_num = 0
         messages = []
@@ -97,7 +87,7 @@ async def main():
                 msg_info['forwarded_from'] = message.forward_from.first_name
 
             if message.sticker is not None:
-                if download_media['sticker'] is True:
+                if DOWNLOAD_MEDIA['sticker'] is True:
                     media_dir = f'{chat_export_name}/stickers'
                     os.makedirs(media_dir, exist_ok=True)
                     sticker_name = f'{media_dir}/{message.sticker.file_name}'
@@ -111,7 +101,7 @@ async def main():
                         thumbnail_name
                     )
                     msg_info['file'] = f'stickers/{message.sticker.file_name}'
-                    msg_info['thumbnail'] = thumbnail_name
+                    msg_info['thumbnail'] = f'stickers/{message.sticker.file_name}_thumb.jpg'
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                     msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
@@ -120,7 +110,7 @@ async def main():
                 msg_info['width'] = message.sticker.width
                 msg_info['height'] = message.sticker.height
             elif message.photo is not None:
-                if download_media['photo'] is True:
+                if DOWNLOAD_MEDIA['photo'] is True:
                     os.makedirs(f'{chat_export_name}/photos', exist_ok=True)
                     photo_name = f'{chat_export_name}/photos/{message.photo.file_name}'
                     await app.download_media(
@@ -133,7 +123,7 @@ async def main():
                 msg_info['width'] = message.sticker.width
                 msg_info['height'] = message.sticker.height
             elif message.video is not None:
-                if download_media['video'] is True:
+                if DOWNLOAD_MEDIA['video'] is True:
                     media_dir = f'{chat_export_name}/video_files',
                     os.makedirs(
                         media_dir,
@@ -149,7 +139,7 @@ async def main():
                         message.video.thumbs[0].file_id,
                         thumbnail_name
                     )
-                    msg_info['file'] = f'video_files/{messsage.video.file_name}'
+                    msg_info['file'] = f'video_files/{message.video.file_name}'
                     msg_info['thumbnail'] = f'video_files/{message.video.file_name}_thumb.jpg'
 
                 else:
@@ -162,7 +152,7 @@ async def main():
                 msg_info['height'] = message.video.height
             # TODO: media_type animation
             elif message.video_note is not None:
-                if download_media['video_message'] is True:
+                if DOWNLOAD_MEDIA['video_message'] is True:
                     # TODO: video_message_num is not correct because we read messages last to first
                     video_message_num += 1
                     media_dir = f'{chat_export_name}/round_video_messages'
@@ -191,7 +181,7 @@ async def main():
                 msg_info['mime_type'] = message.video_note.mime_type
                 msg_info['duration_seconds'] = message.video_note.duration
             elif message.audio is not None:
-                if download_media['audio'] is True:
+                if DOWNLOAD_MEDIA['audio'] is True:
                     media_dir = f'{chat_export_name}/files'
                     os.makedirs(
                         media_dir,
@@ -213,7 +203,7 @@ async def main():
             elif message.voice is not None:
                 # TODO: voice_num is not correct because we read messages last to first
                 voice_num += 1
-                if download_media['voice_message'] is True:
+                if DOWNLOAD_MEDIA['voice_message'] is True:
                     media_dir = f'{chat_export_name}/voice_messages'
                     os.makedirs(
                         media_dir,
@@ -232,7 +222,7 @@ async def main():
                 msg_info['mime_type'] = message.voice.mime_type
                 msg_info['duration_seconds'] = message.voice.duration
             elif message.document is not None:
-                if download_media['document'] is True:
+                if DOWNLOAD_MEDIA['document'] is True:
                     media_dir = f'{chat_export_name}/files'
                     os.makedirs(media_dir, exist_ok=True)
                     doc_name = f'{media_dir}/{message.document.file_name}'
