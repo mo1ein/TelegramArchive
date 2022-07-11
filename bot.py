@@ -2,7 +2,7 @@
 import os
 import json
 import time
-import datetime
+from datetime import datetime
 from pyrogram import Client
 from pyrogram.enums import ChatType
 from config import APP_ID, API_HASH
@@ -25,14 +25,16 @@ async def main():
 
         # TODO: choosed by user
         download_media = {
-            'document': False,
             'audio': False,
-            'voice': False,
             'video': False,
             'photo': True,
+            'sticker': True,
+            'document': True,
+            'voice_message': True,
             'video_message': True
         }
         voice_num = 0
+        video_message_num = 0
         messages = []
         chat_data = {}
 
@@ -98,17 +100,17 @@ async def main():
                 if download_media['sticker'] is True:
                     media_dir = f'{chat_export_name}/stickers'
                     os.makedirs(media_dir, exist_ok=True)
-                    sticker_name = f'{media_dir}/{message.sticer.file_name}'
+                    sticker_name = f'{media_dir}/{message.sticker.file_name}'
                     await app.download_media(
                         message.sticker.file_id,
                         sticker_name
                     )
                     thumbnail_name = f'{media_dir}/{message.sticker.file_name}_thumb.jpg'
                     await app.download_media(
-                        message.sticker.thumbs.file_id,
+                        message.sticker.thumbs[0].file_id,
                         thumbnail_name
                     )
-                    msg_info['file'] = sticker_name
+                    msg_info['file'] = f'stickers/{message.sticker.file_name}'
                     msg_info['thumbnail'] = thumbnail_name
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
@@ -120,12 +122,12 @@ async def main():
             elif message.photo is not None:
                 if download_media['photo'] is True:
                     os.makedirs(f'{chat_export_name}/photos', exist_ok=True)
-                    photo_name = f'{chat_export_name}/photos/{message.video.file_name}'
+                    photo_name = f'{chat_export_name}/photos/{message.photo.file_name}'
                     await app.download_media(
                         message.photo.file_id,
                         photo_name
                     )
-                    msg_info['photo'] = photo_name
+                    msg_info['photo'] = f'photos/{message.photo.file_name}'
                 else:
                     msg_info['photo'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['width'] = message.sticker.width
@@ -144,11 +146,12 @@ async def main():
                     )
                     thumbnail_name = f'{media_dir}/{message.video.file_name}_thumb.jpg'
                     await app.download_media(
-                        message.video.thumbs.file_id,
+                        message.video.thumbs[0].file_id,
                         thumbnail_name
                     )
-                    msg_info['file'] = video_name
-                    msg_info['thumbnail'] = thumbnail_name
+                    msg_info['file'] = f'video_files/{messsage.video.file_name}'
+                    msg_info['thumbnail'] = f'video_files/{message.video.file_name}_thumb.jpg'
+
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                     msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
@@ -160,24 +163,27 @@ async def main():
             # TODO: media_type animation
             elif message.video_note is not None:
                 if download_media['video_message'] is True:
+                    # TODO: video_message_num is not correct because we read messages last to first
+                    video_message_num += 1
                     media_dir = f'{chat_export_name}/round_video_messages'
                     os.makedirs(
                         media_dir,
                         exist_ok=True
                     )
-                    video_message_name = f'{media_dir}/{message.video_note.file_name}'
+                    date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+                    video_message_name = f'{media_dir}/file_{video_message_num}@{date}.mp4'
                     # TODO: if not downloaded??
                     await app.download_media(
                         message.video_note.file_id,
                         video_message_name
                     )
-                    thumbnail_name = f'{media_dir}/{message.video_note.file_name}_thumb.jpg'
+                    thumbnail_name = f'{media_dir}/file_{video_message_num}@{date}.mp4_thumb.jpg'
                     await app.download_media(
-                        message.video_note.thumbs.file_id,
+                        message.video_note.thumbs[0].file_id,
                         thumbnail_name
                     )
-                    msg_info['file'] = video_message_name
-                    msg_info['thumbnail'] = thumbnail_name
+                    msg_info['file'] = f'round_video_messages/file_{video_message_num}@{date}.mp4'
+                    msg_info['thumbnail'] = f'round_video_messages/file_{video_message_num}@{date}.mp4_thumb.jpg'
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                     msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
@@ -196,7 +202,7 @@ async def main():
                         message.audio.file_id,
                         audio_name
                     )
-                    msg_info['file'] = audio_name
+                    msg_info['file'] = f'files/{message.audio.file_name}'
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['media_type'] = 'audio_file'
@@ -207,7 +213,7 @@ async def main():
             elif message.voice is not None:
                 # TODO: voice_num is not correct because we read messages last to first
                 voice_num += 1
-                if download_media['voice'] is True:
+                if download_media['voice_message'] is True:
                     media_dir = f'{chat_export_name}/voice_messages'
                     os.makedirs(
                         media_dir,
@@ -219,7 +225,7 @@ async def main():
                         message.voice.file_id,
                         voice_name
                     )
-                    msg_info['file'] = voice_name
+                    msg_info['file'] = f'voice_messages/audio_{voice_num}@{date}.ogg'
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['media_type'] = 'voice_message'
@@ -234,15 +240,17 @@ async def main():
                         message.document.file_id,
                         doc_name
                     )
-                    thumbnail_name = f'{media_dir}/{message.document.file_name}_thumb.jpg'
-                    await app.download_media(
-                        message.document.thumbs.file_id,
-                        thumbnail_name
-                    )
-                    msg_info['file'] = doc_name
-                    msg_info['thumbnail'] = thumbnail_name
+                    if message.document.thumbs is not None:
+                        thumbnail_name = f'{media_dir}/{message.document.file_name}_thumb.jpg'
+                        await app.download_media(
+                            message.document.thumbs[0].file_id,
+                            thumbnail_name
+                        )
+                        msg_info['thumbnail'] = f'files/{message.document.file_name}_thumb.jpg'
+                    msg_info['file'] = f'files/{message.document.file_name}'
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+                    # TODO: if have thumbnail??
                     msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
                 # msg_info['media_type'] = 'document'
                 msg_info['mime_type'] = message.document.mime_type
@@ -265,7 +273,7 @@ async def main():
             json.dump(chat_data, f, indent=4, default=str)
 
 
-def convert_to_unixtime(date: datetime.datetime):
+def convert_to_unixtime(date: datetime):
     # telegram date format: "2022-07-10 08:49:23"
     unix_time = int(time.mktime(date.timetuple()))
     return unix_time
