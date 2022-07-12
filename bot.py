@@ -3,7 +3,7 @@ import os
 import json
 import time
 from datetime import datetime
-from pyrogram import Client
+from pyrogram import Client, Message
 from pyrogram.enums import ChatType
 from config import APP_ID, API_HASH, DOWNLOAD_MEDIA
 
@@ -47,7 +47,6 @@ async def main():
                 chat_data['id'] = str(chat.id)[4::]
 
         chat_export_date = datetime.now().strftime("%Y-%m-%d")
-        # TODO: use username instead of name
         chat_export_name = f'ChatExport_{username}_{chat_export_date}'
         # TODO: when user want other path
         path = ''
@@ -89,40 +88,8 @@ async def main():
                 msg_info['forwarded_from'] = message.forward_from.first_name
 
             if message.sticker is not None:
-                if DOWNLOAD_MEDIA['sticker'] is True:
-                    media_dir = f'{chat_export_name}/stickers'
-                    os.makedirs(media_dir, exist_ok=True)
-                    sticker_name = f'{media_dir}/{message.sticker.file_name}'
-                    try:
-                        # TODO: None returned??
-                        await app.download_media(
-                            message.sticker.file_id,
-                            sticker_name
-                        )
-                        msg_info['file'] = f'stickers/{message.sticker.file_name}'
-                    except ValueError:
-                        print("Oops can't download media!")
-                        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+                sticker_data(message, msg_info, chat_export_name)
 
-                    thumbnail_name = f'{media_dir}/{message.sticker.file_name}_thumb.jpg'
-                    # TODO: if have thumb?
-                    try:
-                        # TODO: None returned??
-                        await app.download_media(
-                            message.sticker.thumbs[0].file_id,
-                            thumbnail_name
-                        )
-                        msg_info['thumbnail'] = f'stickers/{message.sticker.file_name}_thumb.jpg'
-                    except ValueError:
-                        print("Oops can't download media!")
-                        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
-                else:
-                    msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-                    msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
-                msg_info['media_type'] = 'sticker'
-                msg_info['sticker_emoji'] = message.sticker.emoji
-                msg_info['width'] = message.sticker.width
-                msg_info['height'] = message.sticker.height
             elif message.photo is not None:
                 if DOWNLOAD_MEDIA['photo'] is True:
                     photo_num += 1
@@ -164,7 +131,7 @@ async def main():
                         msg_info['file'] = "(File not included. Change data exporting settings to download.)"
 
                     thumbnail_name = f'{media_dir}/{message.video.file_name}_thumb.jpg'
-                    #TODO: if have thumb?
+                    # TODO: if have thumb?
                     try:
                         # TODO: None returned??
                         await app.download_media(
@@ -207,7 +174,7 @@ async def main():
                         msg_info['file'] = "(File not included. Change data exporting settings to download.)"
 
                     thumbnail_name = f'{media_dir}/file_{video_message_num}@{date}.mp4_thumb.jpg'
-                    #TODO: if have thumb?
+                    # TODO: if have thumb?
                     try:
                         await app.download_media(
                             message.video_note.thumbs[0].file_id,
@@ -320,6 +287,44 @@ async def main():
 
         with open('output.json', mode='w') as f:
             json.dump(chat_data, f, indent=4, default=str)
+
+
+def sticker_data(message: Message, msg_info: dict, chat_export_name: str):
+    if DOWNLOAD_MEDIA['sticker'] is True:
+        media_dir = f'{chat_export_name}/stickers'
+        os.makedirs(media_dir, exist_ok=True)
+        sticker_name = f'{media_dir}/{message.sticker.file_name}'
+        try:
+            # TODO: None returned??
+            await app.download_media(
+                message.sticker.file_id,
+                sticker_name
+            )
+            msg_info['file'] = f'stickers/{message.sticker.file_name}'
+        except ValueError:
+            print("Oops can't download media!")
+            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+
+        thumbnail_name = f'{media_dir}/{message.sticker.file_name}_thumb.jpg'
+        # TODO: if have thumb?
+        try:
+            # TODO: None returned??
+            await app.download_media(
+                message.sticker.thumbs[0].file_id,
+                thumbnail_name
+            )
+            msg_info['thumbnail'] = f'stickers/{message.sticker.file_name}_thumb.jpg'
+        except ValueError:
+            print("Oops can't download media!")
+            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+
+    else:
+        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+    msg_info['media_type'] = 'sticker'
+    msg_info['sticker_emoji'] = message.sticker.emoji
+    msg_info['width'] = message.sticker.width
+    msg_info['height'] = message.sticker.height
 
 
 def convert_to_unixtime(date: datetime):
