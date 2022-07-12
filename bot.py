@@ -111,41 +111,11 @@ async def main():
                 voice_num += 1
                 voice_data(messages, msg_info, chat_export_name, voice_num)
             elif message.document is not None:
-                if DOWNLOAD_MEDIA['document'] is True:
-                    media_dir = f'{chat_export_name}/files'
-                    os.makedirs(media_dir, exist_ok=True)
-                    doc_name = f'{media_dir}/{message.document.file_name}'
-                    try:
-                        await app.download_media(
-                            message.document.file_id,
-                            doc_name
-                        )
-                        msg_info['file'] = f'files/{message.document.file_name}'
-                    except ValueError:
-                        print("Oops can't download media!")
-                        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-
-                    if message.document.thumbs is not None:
-                        thumbnail_name = f'{media_dir}/{message.document.file_name}_thumb.jpg'
-                        try:
-                            await app.download_media(
-                                message.document.thumbs[0].file_id,
-                                thumbnail_name
-                            )
-                            msg_info['thumbnail'] = f'files/{message.document.file_name}_thumb.jpg'
-                        except ValueError:
-                            print("Oops can't download media!")
-                            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
-                else:
-                    msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-                    # TODO: if have thumbnail??
-                    msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
-                msg_info['mime_type'] = message.document.mime_type
+                document_data(message, msg_info, chat_export_name)
 
             # TODO: add hashtag
             # TODO: add mentions
             # TODO: add links, hrefs...
-
             if message.text is not None:
                 msg_info['text'] = message.text
             else:
@@ -360,6 +330,39 @@ def voice_data(
     msg_info['media_type'] = 'voice_message'
     msg_info['mime_type'] = message.voice.mime_type
     msg_info['duration_seconds'] = message.voice.duration
+
+
+def document_data(message: Message, msg_info: dict, chat_export_name: str):
+    if DOWNLOAD_MEDIA['document'] is True:
+        media_dir = f'{chat_export_name}/files'
+        os.makedirs(media_dir, exist_ok=True)
+        doc_name = f'{media_dir}/{message.document.file_name}'
+        try:
+            await app.download_media(
+                message.document.file_id,
+                doc_name
+            )
+            msg_info['file'] = f'files/{message.document.file_name}'
+        except ValueError:
+            print("Oops can't download media!")
+            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+
+        if message.document.thumbs is not None:
+            thumbnail_name = f'{media_dir}/{message.document.file_name}_thumb.jpg'
+            try:
+                await app.download_media(
+                    message.document.thumbs[0].file_id,
+                    thumbnail_name
+                )
+                msg_info['thumbnail'] = f'files/{message.document.file_name}_thumb.jpg'
+            except ValueError:
+                print("Oops can't download media!")
+                msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+    else:
+        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+        # TODO: if have thumbnail??
+        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+    msg_info['mime_type'] = message.document.mime_type
 
 
 def convert_to_unixtime(date: datetime):
