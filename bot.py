@@ -119,12 +119,22 @@ async def main():
             # TODO: add hashtag
             # TODO: add mentions
             # TODO: add links, hrefs...
-            text = []
             if message.text is not None:
-                
-                msg_info['text'] = message.text
+                text = get_text_data(message, 'text')
+                if text != []:
+                    text.append(message.text)
+                    msg_info['text'] = text
+                else:
+                    msg_info['text'] = message.text
+            elif message.caption is not None:
+                text = get_text_data(message, 'caption')
+                if text != []:
+                    text.append(message.caption)
+                    msg_info['text'] = text
+                else:
+                    msg_info['text'] = message.caption
             else:
-                msg_info['text'] = ""
+                msg_info['text'] = ''
 
             messages.append(msg_info)
             # for start first message in json
@@ -374,91 +384,75 @@ async def get_document_data(message: Message, msg_info: dict, chat_export_name: 
         msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
     msg_info['mime_type'] = message.document.mime_type
 
-def get_text_data(message: Message):
-    if message.text.entities is not None:
-        #TODO: fill message entities
-        msg_type = message.text.entities.type
-        if msg_type == MessageEntity.URL:
-            txt = {}
-            txt['type'] = 'url'
-            text.append(txt)
-        elif msg_type == MessageEntityType.HASHTAG:
-            txt = {}
+def get_text_data(message: Message, text_mode: str) -> list:
+    text = []
+    if text_mode == 'caption':
+        if message.caption_entities is not None:
+            entities = message.caption_entities
+        else:
+            return text
+    elif text_mode == 'text':
+        if message.text.entities is not None:
+            entities = message.text.entities
+        else:
+            return text
+
+    #TODO: bug. remove entitiy part from all message
+    for e in entities:
+        txt = {}
+        if e.type == MessageEntityType.URL:
+            txt['type'] = 'link'
+        elif e.type == MessageEntityType.HASHTAG:
             txt['type'] = 'hashtag'
-            text.append(txt)
-        elif msg_type == MessageEntityType.CASHTAG:
-            txt = {}
+        elif e.type == MessageEntityType.CASHTAG:
             txt['type'] = 'cashtag'
-            text.append(txt)
-        elif msg_type == MessageEntityType.BOT_COMMAND:
-            txt = {}
+        elif e.type == MessageEntityType.BOT_COMMAND:
             txt['type'] = 'bot_command'
-            text.append(txt)
-        elif msg_type == MessageEntityType.MENTION:
-            txt = {}
+        elif e.type == MessageEntityType.MENTION:
             txt['type'] = 'mention'
-            text.append(txt)
-        elif msg_type == MessageEntityType.EMAIL:
-            txt = {}
+        elif e.type == MessageEntityType.EMAIL:
             txt['type'] = 'email'
-            text.append(txt)
-        elif msg_type == MessageEntityType.PHONE_NUMBER:
-            txt = {}
+        elif e.type == MessageEntityType.PHONE_NUMBER:
             txt['type'] = 'phone_number'
-            text.append(txt)
-        elif msg_type == MessageEntityType.BOLD:
-            txt = {}
+        elif e.type == MessageEntityType.BOLD:
             txt['type'] = 'bold'
-            text.append(txt)
-        elif msg_type == MessageEntityType.ITALIC:
-            txt = {}
+        elif e.type == MessageEntityType.ITALIC:
             txt['type'] = 'italic'
-            text.append(txt)
-        elif msg_type == MessageEntityType.UNDERLINE:
-            txt = {}
+        elif e.type == MessageEntityType.UNDERLINE:
             txt['type'] = 'underline'
-            text.append(txt)
-        elif msg_type == MessageEntityType.STRIKETHROUGH:
-            txt = {}
+        elif e.type == MessageEntityType.STRIKETHROUGH:
             txt['type'] = 'strikethrough'
-            text.append(txt)
-        elif msg_type == MessageEntityType.SPOILER:
-            txt = {}
+        elif e.type == MessageEntityType.SPOILER:
             txt['type'] = 'spoiler'
-            text.append(txt)
-            pass
-        elif msg_type == MessageEntityType.CODE:
-            txt = {}
+        elif e.type == MessageEntityType.CODE:
+            # TODO: other parts??
             txt['type'] = 'code'
-            text.append(txt)
-            pass
-        elif msg_type == MessageEntityType.PRE:
-            txt = {}
+        elif e.type == MessageEntityType.PRE:
             txt['type'] = 'pre'
-            text.append(txt)
-        elif msg_type == MessageEntityType.BLOCKQUOTE:
-            txt = {}
+            txt['language'] = ''
+        elif e.type == MessageEntityType.BLOCKQUOTE:
+            # TODO: other parts??
             txt['type'] = 'blockquote'
-            text.append(txt)
-        elif msg_type == MessageEntityType.TEXT_LINK:
-            txt = {}
+        elif e.type == MessageEntityType.TEXT_LINK:
             txt['type'] = 'text_link'
-            txt['text'] = ''
-            txt['href'] = ''
-            text.append(txt)
-        elif msg_type == MessageEntityType.TEXT_MENTION:
-            txt = {}
+            txt['href'] = e.url
+        elif e.type == MessageEntityType.TEXT_MENTION:
+            # TODO: other parts??
             txt['type'] = 'text_mention'
-            txt['text'] = ''
-            text.append(txt)
-        elif msg_type == MessageEntityType.BANK_CARD:
-            txt = {}
+        elif e.type == MessageEntityType.BANK_CARD:
+            # TODO: other parts??
             txt['type'] = 'bank_card'
-            text.append(txt)
         # TODO: add other formats...
         else:
-            # UNKNOWN
-            pass
+            # TODO: other parts??
+            txt['type'] = 'unknown'
+
+        if text_mode == 'text':
+            txt['text'] = message.text[e.offset:e.length]
+        else:
+            txt['text'] = message.caption[e.offset:e.length]
+        text.append(txt)
+    return text
 
 
 def convert_to_unixtime(date: datetime):
