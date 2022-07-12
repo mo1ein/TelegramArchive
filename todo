@@ -1,5 +1,9 @@
 
-[] - add feature not dl text just dl media...
+[] - set media type from messageMediaType.video or...
+not from if audio...or ...
+[] - export chat for groups
+[] - animation
+[] - add feature not dl text just dl media... or just text
 [] - voice and video messages number is reversed
 [] - hashtags in text
 [] - change download_media name
