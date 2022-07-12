@@ -1,8 +1,7 @@
 
-[] - if files not dl exception
+[] - add feature not dl text just dl media...
 [] - voice and video messages number is reversed
 [] - hashtags in text
-[] - media_type in doc??
 [] - change download_media name
 
 [] - output html
@@ -13,7 +12,3 @@
 [] - add archive saved messages use "me" in id part
 [] - if media or chat exist don't add for cron feature
 [] - good name for project
-
-[x] - get chat and backup for last chat or recently chat...
-[x] - output media
-[x] - output json
