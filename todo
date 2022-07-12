@@ -1,17 +1,14 @@
 
-[] - set media type from messageMediaType.video or...
-not from if audio...or ...
 [] - export chat for groups
 [] - animation
-[] - add feature not dl text just dl media... or just text
 [] - voice and video messages number is reversed
 [] - change download_media name
 
+[] - backup contacts cv
 [] - output html
 [] - output pdf
 [] - output text
 [] - get recently chats
-[] - encode unicode for emojies in json not like this: \u223
-[] - add archive saved messages use "me" in id part
+[] - if someone get online notif me
 [] - if media or chat exist don't add for cron feature
 [] - good name for project
