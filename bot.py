@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 from pyrogram import Client
 from pyrogram.types import Message
-from pyrogram.enums import ChatType
+from pyrogram.enums import ChatType, MessageEntityType
 from config import APP_ID, API_HASH, DOWNLOAD_MEDIA
 
 app = Client(
@@ -16,6 +16,7 @@ app = Client(
 
 # TODO: list of users
 chat_ids = 'mo_ein'
+# chat_ids = 'me'
 
 
 async def main():
@@ -54,7 +55,7 @@ async def main():
 
         async for message in app.get_chat_history(chat_ids):
             # TODO: add initial message of channel
-            # print(message)
+            print(message)
             # print('clone!')
             msg_info = {}
             msg_info['id'] = message.id
@@ -118,7 +119,9 @@ async def main():
             # TODO: add hashtag
             # TODO: add mentions
             # TODO: add links, hrefs...
+            text = []
             if message.text is not None:
+                
                 msg_info['text'] = message.text
             else:
                 msg_info['text'] = ""
@@ -370,6 +373,92 @@ async def get_document_data(message: Message, msg_info: dict, chat_export_name: 
         # TODO: if have thumbnail??
         msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
     msg_info['mime_type'] = message.document.mime_type
+
+def get_text_data(message: Message):
+    if message.text.entities is not None:
+        #TODO: fill message entities
+        msg_type = message.text.entities.type
+        if msg_type == MessageEntity.URL:
+            txt = {}
+            txt['type'] = 'url'
+            text.append(txt)
+        elif msg_type == MessageEntityType.HASHTAG:
+            txt = {}
+            txt['type'] = 'hashtag'
+            text.append(txt)
+        elif msg_type == MessageEntityType.CASHTAG:
+            txt = {}
+            txt['type'] = 'cashtag'
+            text.append(txt)
+        elif msg_type == MessageEntityType.BOT_COMMAND:
+            txt = {}
+            txt['type'] = 'bot_command'
+            text.append(txt)
+        elif msg_type == MessageEntityType.MENTION:
+            txt = {}
+            txt['type'] = 'mention'
+            text.append(txt)
+        elif msg_type == MessageEntityType.EMAIL:
+            txt = {}
+            txt['type'] = 'email'
+            text.append(txt)
+        elif msg_type == MessageEntityType.PHONE_NUMBER:
+            txt = {}
+            txt['type'] = 'phone_number'
+            text.append(txt)
+        elif msg_type == MessageEntityType.BOLD:
+            txt = {}
+            txt['type'] = 'bold'
+            text.append(txt)
+        elif msg_type == MessageEntityType.ITALIC:
+            txt = {}
+            txt['type'] = 'italic'
+            text.append(txt)
+        elif msg_type == MessageEntityType.UNDERLINE:
+            txt = {}
+            txt['type'] = 'underline'
+            text.append(txt)
+        elif msg_type == MessageEntityType.STRIKETHROUGH:
+            txt = {}
+            txt['type'] = 'strikethrough'
+            text.append(txt)
+        elif msg_type == MessageEntityType.SPOILER:
+            txt = {}
+            txt['type'] = 'spoiler'
+            text.append(txt)
+            pass
+        elif msg_type == MessageEntityType.CODE:
+            txt = {}
+            txt['type'] = 'code'
+            text.append(txt)
+            pass
+        elif msg_type == MessageEntityType.PRE:
+            txt = {}
+            txt['type'] = 'pre'
+            text.append(txt)
+        elif msg_type == MessageEntityType.BLOCKQUOTE:
+            txt = {}
+            txt['type'] = 'blockquote'
+            text.append(txt)
+        elif msg_type == MessageEntityType.TEXT_LINK:
+            txt = {}
+            txt['type'] = 'text_link'
+            txt['text'] = ''
+            txt['href'] = ''
+            text.append(txt)
+        elif msg_type == MessageEntityType.TEXT_MENTION:
+            txt = {}
+            txt['type'] = 'text_mention'
+            txt['text'] = ''
+            text.append(txt)
+        elif msg_type == MessageEntityType.BANK_CARD:
+            txt = {}
+            txt['type'] = 'bank_card'
+            text.append(txt)
+        # TODO: add other formats...
+        else:
+            # UNKNOWN
+            pass
 
 
 def convert_to_unixtime(date: datetime):
