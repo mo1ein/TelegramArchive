@@ -293,6 +293,47 @@ def photo_data(message: Message, msg_info: dict, chat_export_name: str, photo_nu
     msg_info['height'] = message.photo.height
 
 
+def video_data(message: Message, msg_info: dict, chat_export_name: str):
+    if DOWNLOAD_MEDIA['video'] is True:
+        media_dir = f'{chat_export_name}/video_files'
+        os.makedirs(
+            media_dir,
+            exist_ok=True
+        )
+        video_name = f'{media_dir}/{message.video.file_name}'
+        try:
+            # TODO: None returned??
+            await app.download_media(
+                message.video.file_id,
+                video_name
+            )
+            msg_info['file'] = f'video_files/{message.video.file_name}'
+        except ValueError:
+            print("Oops can't download media!")
+            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+
+        thumbnail_name = f'{media_dir}/{message.video.file_name}_thumb.jpg'
+        # TODO: if have thumb?
+        try:
+            # TODO: None returned??
+            await app.download_media(
+                message.video.thumbs[0].file_id,
+                thumbnail_name
+            )
+            msg_info['thumbnail'] = f'video_files/{message.video.file_name}_thumb.jpg'
+        except ValueError:
+            print("Oops can't download media!")
+            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+    else:
+        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+    msg_info['media_type'] = 'video_file'
+    msg_info['mime_type'] = message.video.mime_type
+    msg_info['duration_seconds'] = message.video.duration
+    msg_info['width'] = message.video.width
+    msg_info['height'] = message.video.height
+
+
 def convert_to_unixtime(date: datetime):
     # telegram date format: "2022-07-10 08:49:23"
     unix_time = int(time.mktime(date.timetuple()))
