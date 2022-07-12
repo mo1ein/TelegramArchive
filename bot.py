@@ -92,28 +92,28 @@ async def main():
             # TODO: media_type animation??
 
             if message.sticker is not None:
-                get_sticker_data(message, msg_info, chat_export_name)
+                await get_sticker_data(message, msg_info, chat_export_name)
             elif message.photo is not None:
                 photo_num += 1
-                get_photo_data(message, msg_info, chat_export_name, photo_num)
+                await get_photo_data(message, msg_info, chat_export_name, photo_num)
             elif message.video is not None:
-                get_video_data(message, msg_info, chat_export_name)
+                await get_video_data(message, msg_info, chat_export_name)
             elif message.video_note is not None:
                 video_message_num += 1
-                get_video_note_data(
+                await get_video_note_data(
                     message,
                     msg_info,
                     chat_export_name,
                     video_message_num
                 )
             elif message.audio is not None:
-                get_audio_data(message, msg_info, chat_export_name)
+                await get_audio_data(message, msg_info, chat_export_name)
             elif message.voice is not None:
                 # TODO: voice_num is not correct because we read messages last to first
                 voice_num += 1
-                get_voice_data(messages, msg_info, chat_export_name, voice_num)
+                await get_voice_data(message, msg_info, chat_export_name, voice_num)
             elif message.document is not None:
-                get_document_data(message, msg_info, chat_export_name)
+                await get_document_data(message, msg_info, chat_export_name)
 
             # TODO: add hashtag
             # TODO: add mentions
@@ -132,7 +132,7 @@ async def main():
             json.dump(chat_data, f, indent=4, default=str)
 
 
-def get_sticker_data(message: Message, msg_info: dict, chat_export_name: str):
+async def get_sticker_data(message: Message, msg_info: dict, chat_export_name: str):
     if DOWNLOAD_MEDIA['sticker'] is True:
         media_dir = f'{chat_export_name}/stickers'
         os.makedirs(media_dir, exist_ok=True)
@@ -170,7 +170,7 @@ def get_sticker_data(message: Message, msg_info: dict, chat_export_name: str):
     msg_info['height'] = message.sticker.height
 
 
-def get_photo_data(
+async def get_photo_data(
         message: Message,
         msg_info: dict,
         chat_export_name: str,
@@ -197,7 +197,7 @@ def get_photo_data(
     msg_info['height'] = message.photo.height
 
 
-def get_video_data(message: Message, msg_info: dict, chat_export_name: str):
+async def get_video_data(message: Message, msg_info: dict, chat_export_name: str):
     if DOWNLOAD_MEDIA['video'] is True:
         media_dir = f'{chat_export_name}/video_files'
         os.makedirs(
@@ -238,7 +238,7 @@ def get_video_data(message: Message, msg_info: dict, chat_export_name: str):
     msg_info['height'] = message.video.height
 
 
-def get_video_note_data(
+async def get_video_note_data(
     message: Message,
     msg_info: dict,
     chat_export_name: str,
@@ -283,7 +283,7 @@ def get_video_note_data(
     msg_info['duration_seconds'] = message.video_note.duration
 
 
-def get_audio_data(message: Message, msg_info: dict, chat_export_name: str):
+async def get_audio_data(message: Message, msg_info: dict, chat_export_name: str):
     if DOWNLOAD_MEDIA['audio'] is True:
         media_dir = f'{chat_export_name}/files'
         os.makedirs(
@@ -309,7 +309,7 @@ def get_audio_data(message: Message, msg_info: dict, chat_export_name: str):
     msg_info['duration_seconds'] = message.audio.duration
 
 
-def get_voice_data(
+async def get_voice_data(
         message: Message,
         msg_info: dict,
         chat_export_name: str,
@@ -339,7 +339,7 @@ def get_voice_data(
     msg_info['duration_seconds'] = message.voice.duration
 
 
-def get_document_data(message: Message, msg_info: dict, chat_export_name: str):
+async def get_document_data(message: Message, msg_info: dict, chat_export_name: str):
     if DOWNLOAD_MEDIA['document'] is True:
         media_dir = f'{chat_export_name}/files'
         os.makedirs(media_dir, exist_ok=True)
