@@ -91,11 +91,13 @@ async def main():
             if message.sticker is not None:
                 sticker_data(message, msg_info, chat_export_name)
             elif message.photo is not None:
+                photo_num += 1
                 photo_data(message, msg_info, chat_export_name, photo_num)
             elif message.video is not None:
                 video_data(message, msg_info, chat_export_name)
             # TODO: media_type animation??
             elif message.video_note is not None:
+                video_message_num += 1
                 video_note_data(
                     message,
                     msg_info,
@@ -108,28 +110,6 @@ async def main():
                 # TODO: voice_num is not correct because we read messages last to first
                 voice_num += 1
                 voice_data(messages, msg_info, chat_export_name, voice_num)
-                if DOWNLOAD_MEDIA['voice_message'] is True:
-                    media_dir = f'{chat_export_name}/voice_messages'
-                    os.makedirs(
-                        media_dir,
-                        exist_ok=True
-                    )
-                    date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-                    voice_name = f'{media_dir}/audio_{voice_num}@{date}.ogg'
-                    try:
-                        await app.download_media(
-                            message.voice.file_id,
-                            voice_name
-                        )
-                        msg_info['file'] = f'voice_messages/audio_{voice_num}@{date}.ogg'
-                    except ValueError:
-                        print("Oops can't download media!")
-                        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-                else:
-                    msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-                msg_info['media_type'] = 'voice_message'
-                msg_info['mime_type'] = message.voice.mime_type
-                msg_info['duration_seconds'] = message.voice.duration
             elif message.document is not None:
                 if DOWNLOAD_MEDIA['document'] is True:
                     media_dir = f'{chat_export_name}/files'
@@ -220,7 +200,6 @@ def sticker_data(message: Message, msg_info: dict, chat_export_name: str):
 
 def photo_data(message: Message, msg_info: dict, chat_export_name: str, photo_num: int):
     if DOWNLOAD_MEDIA['photo'] is True:
-        photo_num += 1
         os.makedirs(f'{chat_export_name}/photos', exist_ok=True)
         date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
         # TODO: what format for png??
@@ -290,7 +269,6 @@ def video_note_data(
 ):
     if DOWNLOAD_MEDIA['video_message'] is True:
         # TODO: video_message_num is not correct because we read messages last to first
-        video_message_num += 1
         media_dir = f'{chat_export_name}/round_video_messages'
         os.makedirs(
             media_dir,
@@ -352,6 +330,36 @@ def audio_data(message: Message, msg_info: dict, chat_export_name: str):
     msg_info['title'] = message.audio.title
     msg_info['mime_type'] = message.audio.mime_type
     msg_info['duration_seconds'] = message.audio.duration
+
+
+def voice_data(
+        message: Message,
+        msg_info: dict,
+        chat_export_name: str,
+        voice_num: int
+):
+    if DOWNLOAD_MEDIA['voice_message'] is True:
+        media_dir = f'{chat_export_name}/voice_messages'
+        os.makedirs(
+            media_dir,
+            exist_ok=True
+        )
+        date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+        voice_name = f'{media_dir}/audio_{voice_num}@{date}.ogg'
+        try:
+            await app.download_media(
+                message.voice.file_id,
+                voice_name
+            )
+            msg_info['file'] = f'voice_messages/audio_{voice_num}@{date}.ogg'
+        except ValueError:
+            print("Oops can't download media!")
+            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+    else:
+        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+    msg_info['media_type'] = 'voice_message'
+    msg_info['mime_type'] = message.voice.mime_type
+    msg_info['duration_seconds'] = message.voice.duration
 
 
 def convert_to_unixtime(date: datetime):
