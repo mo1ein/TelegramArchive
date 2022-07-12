@@ -26,19 +26,20 @@ async def main():
         voice_num = 0
         photo_num = 0
         video_message_num = 0
+        username = ''
         messages = []
         chat_data = {}
 
         if chat.type == ChatType.PRIVATE:
             user_info = await app.get_users(chat_ids)
-            # print(user_info)
+            username = user_info.username
             chat_data['name'] = user_info.first_name
             chat_data['type'] = 'personal_chat'
             chat_data['id'] = user_info.id
         elif chat.type == ChatType.CHANNEL:
+            username = chat.username
             chat_data['name'] = chat.title
             chat_data['type'] = 'public_channel'
-            # print(chat)
 
             # when using telegram api ids have -100 prefix
             # https://stackoverflow.com/questions/33858927/how-to-obtain-the-chat-id-of-a-private-telegram-channel
@@ -47,7 +48,7 @@ async def main():
 
         chat_export_date = datetime.now().strftime("%Y-%m-%d")
         # TODO: use username instead of name
-        chat_export_name = f'ChatExport_{chat_data["name"]}_{chat_export_date}'
+        chat_export_name = f'ChatExport_{username}_{chat_export_date}'
         # TODO: when user want other path
         path = ''
 
@@ -92,17 +93,29 @@ async def main():
                     media_dir = f'{chat_export_name}/stickers'
                     os.makedirs(media_dir, exist_ok=True)
                     sticker_name = f'{media_dir}/{message.sticker.file_name}'
-                    await app.download_media(
-                        message.sticker.file_id,
-                        sticker_name
-                    )
+                    try:
+                        # TODO: None returned??
+                        await app.download_media(
+                            message.sticker.file_id,
+                            sticker_name
+                        )
+                        msg_info['file'] = f'stickers/{message.sticker.file_name}'
+                    except ValueError:
+                        print("Oops can't download media!")
+                        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+
                     thumbnail_name = f'{media_dir}/{message.sticker.file_name}_thumb.jpg'
-                    await app.download_media(
-                        message.sticker.thumbs[0].file_id,
-                        thumbnail_name
-                    )
-                    msg_info['file'] = f'stickers/{message.sticker.file_name}'
-                    msg_info['thumbnail'] = f'stickers/{message.sticker.file_name}_thumb.jpg'
+                    # TODO: if have thumb?
+                    try:
+                        # TODO: None returned??
+                        await app.download_media(
+                            message.sticker.thumbs[0].file_id,
+                            thumbnail_name
+                        )
+                        msg_info['thumbnail'] = f'stickers/{message.sticker.file_name}_thumb.jpg'
+                    except ValueError:
+                        print("Oops can't download media!")
+                        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                     msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
@@ -117,11 +130,16 @@ async def main():
                     date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
                     # TODO: what format for png??
                     photo_name = f'{chat_export_name}/photos/file_{photo_num}@{date}.jpg'
-                    await app.download_media(
-                        message.photo.file_id,
-                        photo_name
-                    )
-                    msg_info['photo'] = f'photos/file_{photo_num}@{date}.jpg'
+                    try:
+                        # TODO: None returned??
+                        await app.download_media(
+                            message.photo.file_id,
+                            photo_name
+                        )
+                        msg_info['photo'] = f'photos/file_{photo_num}@{date}.jpg'
+                    except ValueError:
+                        print("Oops can't download media!")
+                        msg_info['photo'] = "(File not included. Change data exporting settings to download.)"
                 else:
                     msg_info['photo'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['width'] = message.photo.width
@@ -134,18 +152,29 @@ async def main():
                         exist_ok=True
                     )
                     video_name = f'{media_dir}/{message.video.file_name}'
-                    await app.download_media(
-                        message.video.file_id,
-                        video_name
-                    )
-                    thumbnail_name = f'{media_dir}/{message.video.file_name}_thumb.jpg'
-                    await app.download_media(
-                        message.video.thumbs[0].file_id,
-                        thumbnail_name
-                    )
-                    msg_info['file'] = f'video_files/{message.video.file_name}'
-                    msg_info['thumbnail'] = f'video_files/{message.video.file_name}_thumb.jpg'
+                    try:
+                        # TODO: None returned??
+                        await app.download_media(
+                            message.video.file_id,
+                            video_name
+                        )
+                        msg_info['file'] = f'video_files/{message.video.file_name}'
+                    except ValueError:
+                        print("Oops can't download media!")
+                        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
 
+                    thumbnail_name = f'{media_dir}/{message.video.file_name}_thumb.jpg'
+                    #TODO: if have thumb?
+                    try:
+                        # TODO: None returned??
+                        await app.download_media(
+                            message.video.thumbs[0].file_id,
+                            thumbnail_name
+                        )
+                        msg_info['thumbnail'] = f'video_files/{message.video.file_name}_thumb.jpg'
+                    except ValueError:
+                        print("Oops can't download media!")
+                        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                     msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
@@ -167,17 +196,27 @@ async def main():
                     date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
                     video_message_name = f'{media_dir}/file_{video_message_num}@{date}.mp4'
                     # TODO: if not downloaded??
-                    await app.download_media(
-                        message.video_note.file_id,
-                        video_message_name
-                    )
+                    try:
+                        await app.download_media(
+                            message.video_note.file_id,
+                            video_message_name
+                        )
+                        msg_info['file'] = f'round_video_messages/file_{video_message_num}@{date}.mp4'
+                    except ValueError:
+                        print("Oops can't download media!")
+                        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+
                     thumbnail_name = f'{media_dir}/file_{video_message_num}@{date}.mp4_thumb.jpg'
-                    await app.download_media(
-                        message.video_note.thumbs[0].file_id,
-                        thumbnail_name
-                    )
-                    msg_info['file'] = f'round_video_messages/file_{video_message_num}@{date}.mp4'
-                    msg_info['thumbnail'] = f'round_video_messages/file_{video_message_num}@{date}.mp4_thumb.jpg'
+                    #TODO: if have thumb?
+                    try:
+                        await app.download_media(
+                            message.video_note.thumbs[0].file_id,
+                            thumbnail_name
+                        )
+                        msg_info['thumbnail'] = f'round_video_messages/file_{video_message_num}@{date}.mp4_thumb.jpg'
+                    except ValueError:
+                        print("Oops can't download media!")
+                        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                     msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
@@ -192,11 +231,15 @@ async def main():
                         exist_ok=True
                     )
                     audio_name = f'{media_dir}/{message.audio.file_name}'
-                    await app.download_media(
-                        message.audio.file_id,
-                        audio_name
-                    )
-                    msg_info['file'] = f'files/{message.audio.file_name}'
+                    try:
+                        await app.download_media(
+                            message.audio.file_id,
+                            audio_name
+                        )
+                        msg_info['file'] = f'files/{message.audio.file_name}'
+                    except ValueError:
+                        print("Oops can't download media!")
+                        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['media_type'] = 'audio_file'
@@ -215,11 +258,15 @@ async def main():
                     )
                     date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
                     voice_name = f'{media_dir}/audio_{voice_num}@{date}.ogg'
-                    await app.download_media(
-                        message.voice.file_id,
-                        voice_name
-                    )
-                    msg_info['file'] = f'voice_messages/audio_{voice_num}@{date}.ogg'
+                    try:
+                        await app.download_media(
+                            message.voice.file_id,
+                            voice_name
+                        )
+                        msg_info['file'] = f'voice_messages/audio_{voice_num}@{date}.ogg'
+                    except ValueError:
+                        print("Oops can't download media!")
+                        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                 msg_info['media_type'] = 'voice_message'
@@ -230,23 +277,31 @@ async def main():
                     media_dir = f'{chat_export_name}/files'
                     os.makedirs(media_dir, exist_ok=True)
                     doc_name = f'{media_dir}/{message.document.file_name}'
-                    await app.download_media(
-                        message.document.file_id,
-                        doc_name
-                    )
+                    try:
+                        await app.download_media(
+                            message.document.file_id,
+                            doc_name
+                        )
+                        msg_info['file'] = f'files/{message.document.file_name}'
+                    except ValueError:
+                        print("Oops can't download media!")
+                        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+
                     if message.document.thumbs is not None:
                         thumbnail_name = f'{media_dir}/{message.document.file_name}_thumb.jpg'
-                        await app.download_media(
-                            message.document.thumbs[0].file_id,
-                            thumbnail_name
-                        )
-                        msg_info['thumbnail'] = f'files/{message.document.file_name}_thumb.jpg'
-                    msg_info['file'] = f'files/{message.document.file_name}'
+                        try:
+                            await app.download_media(
+                                message.document.thumbs[0].file_id,
+                                thumbnail_name
+                            )
+                            msg_info['thumbnail'] = f'files/{message.document.file_name}_thumb.jpg'
+                        except ValueError:
+                            print("Oops can't download media!")
+                            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
                 else:
                     msg_info['file'] = "(File not included. Change data exporting settings to download.)"
                     # TODO: if have thumbnail??
                     msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
-                # msg_info['media_type'] = 'document'
                 msg_info['mime_type'] = message.document.mime_type
 
             # TODO: add hashtag
