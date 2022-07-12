@@ -3,7 +3,8 @@ import os
 import json
 import time
 from datetime import datetime
-from pyrogram import Client, Message
+from pyrogram import Client
+from pyrogram.types import Message
 from pyrogram.enums import ChatType
 from config import APP_ID, API_HASH, DOWNLOAD_MEDIA
 
@@ -93,73 +94,20 @@ async def main():
                 photo_data(message, msg_info, chat_export_name, photo_num)
             elif message.video is not None:
                 video_data(message, msg_info, chat_export_name)
-                # TODO: media_type animation
+            # TODO: media_type animation??
             elif message.video_note is not None:
-                if DOWNLOAD_MEDIA['video_message'] is True:
-                    # TODO: video_message_num is not correct because we read messages last to first
-                    video_message_num += 1
-                    media_dir = f'{chat_export_name}/round_video_messages'
-                    os.makedirs(
-                        media_dir,
-                        exist_ok=True
-                    )
-                    date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-                    video_message_name = f'{media_dir}/file_{video_message_num}@{date}.mp4'
-                    # TODO: if not downloaded??
-                    try:
-                        await app.download_media(
-                            message.video_note.file_id,
-                            video_message_name
-                        )
-                        msg_info['file'] = f'round_video_messages/file_{video_message_num}@{date}.mp4'
-                    except ValueError:
-                        print("Oops can't download media!")
-                        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-
-                    thumbnail_name = f'{media_dir}/file_{video_message_num}@{date}.mp4_thumb.jpg'
-                    # TODO: if have thumb?
-                    try:
-                        await app.download_media(
-                            message.video_note.thumbs[0].file_id,
-                            thumbnail_name
-                        )
-                        msg_info['thumbnail'] = f'round_video_messages/file_{video_message_num}@{date}.mp4_thumb.jpg'
-                    except ValueError:
-                        print("Oops can't download media!")
-                        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
-                else:
-                    msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-                    msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
-                msg_info['media_type'] = 'video_message'
-                msg_info['mime_type'] = message.video_note.mime_type
-                msg_info['duration_seconds'] = message.video_note.duration
+                video_note_data(
+                    message,
+                    msg_info,
+                    chat_export_name,
+                    video_message_num
+                )
             elif message.audio is not None:
-                if DOWNLOAD_MEDIA['audio'] is True:
-                    media_dir = f'{chat_export_name}/files'
-                    os.makedirs(
-                        media_dir,
-                        exist_ok=True
-                    )
-                    audio_name = f'{media_dir}/{message.audio.file_name}'
-                    try:
-                        await app.download_media(
-                            message.audio.file_id,
-                            audio_name
-                        )
-                        msg_info['file'] = f'files/{message.audio.file_name}'
-                    except ValueError:
-                        print("Oops can't download media!")
-                        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-                else:
-                    msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-                msg_info['media_type'] = 'audio_file'
-                msg_info['performer'] = message.audio.performer
-                msg_info['title'] = message.audio.title
-                msg_info['mime_type'] = message.audio.mime_type
-                msg_info['duration_seconds'] = message.audio.duration
+                audio_data(message, msg_info, chat_export_name)
             elif message.voice is not None:
                 # TODO: voice_num is not correct because we read messages last to first
                 voice_num += 1
+                voice_data(messages, msg_info, chat_export_name, voice_num)
                 if DOWNLOAD_MEDIA['voice_message'] is True:
                     media_dir = f'{chat_export_name}/voice_messages'
                     os.makedirs(
@@ -332,6 +280,78 @@ def video_data(message: Message, msg_info: dict, chat_export_name: str):
     msg_info['duration_seconds'] = message.video.duration
     msg_info['width'] = message.video.width
     msg_info['height'] = message.video.height
+
+
+def video_note_data(
+    message: Message,
+    msg_info: dict,
+    chat_export_name: str,
+    video_message_num: int
+):
+    if DOWNLOAD_MEDIA['video_message'] is True:
+        # TODO: video_message_num is not correct because we read messages last to first
+        video_message_num += 1
+        media_dir = f'{chat_export_name}/round_video_messages'
+        os.makedirs(
+            media_dir,
+            exist_ok=True
+        )
+        date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+        video_message_name = f'{media_dir}/file_{video_message_num}@{date}.mp4'
+        # TODO: if not downloaded??
+        try:
+            await app.download_media(
+                message.video_note.file_id,
+                video_message_name
+            )
+            msg_info['file'] = f'round_video_messages/file_{video_message_num}@{date}.mp4'
+        except ValueError:
+            print("Oops can't download media!")
+            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+
+        thumbnail_name = f'{media_dir}/file_{video_message_num}@{date}.mp4_thumb.jpg'
+        # TODO: if have thumb?
+        try:
+            await app.download_media(
+                message.video_note.thumbs[0].file_id,
+                thumbnail_name
+            )
+            msg_info['thumbnail'] = f'round_video_messages/file_{video_message_num}@{date}.mp4_thumb.jpg'
+        except ValueError:
+            print("Oops can't download media!")
+            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+    else:
+        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+    msg_info['media_type'] = 'video_message'
+    msg_info['mime_type'] = message.video_note.mime_type
+    msg_info['duration_seconds'] = message.video_note.duration
+
+
+def audio_data(message: Message, msg_info: dict, chat_export_name: str):
+    if DOWNLOAD_MEDIA['audio'] is True:
+        media_dir = f'{chat_export_name}/files'
+        os.makedirs(
+            media_dir,
+            exist_ok=True
+        )
+        audio_name = f'{media_dir}/{message.audio.file_name}'
+        try:
+            await app.download_media(
+                message.audio.file_id,
+                audio_name
+            )
+            msg_info['file'] = f'files/{message.audio.file_name}'
+        except ValueError:
+            print("Oops can't download media!")
+            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+    else:
+        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+    msg_info['media_type'] = 'audio_file'
+    msg_info['performer'] = message.audio.performer
+    msg_info['title'] = message.audio.title
+    msg_info['mime_type'] = message.audio.mime_type
+    msg_info['duration_seconds'] = message.audio.duration
 
 
 def convert_to_unixtime(date: datetime):
