@@ -64,6 +64,7 @@ async def main():
             msg_info['date'] = message.date.strftime('%Y-%m-%dT%H:%M:%S')
             msg_info['date_unixtime'] = convert_to_unixtime(message.date)
 
+            # set chat name
             if chat.type != ChatType.CHANNEL:
                 name = ''
                 if message.from_user.first_name is not None:
@@ -88,30 +89,31 @@ async def main():
             elif message.forward_from is not None:
                 msg_info['forwarded_from'] = message.forward_from.first_name
 
+            # TODO: media_type animation??
+
             if message.sticker is not None:
-                sticker_data(message, msg_info, chat_export_name)
+                get_sticker_data(message, msg_info, chat_export_name)
             elif message.photo is not None:
                 photo_num += 1
-                photo_data(message, msg_info, chat_export_name, photo_num)
+                get_photo_data(message, msg_info, chat_export_name, photo_num)
             elif message.video is not None:
-                video_data(message, msg_info, chat_export_name)
-            # TODO: media_type animation??
+                get_video_data(message, msg_info, chat_export_name)
             elif message.video_note is not None:
                 video_message_num += 1
-                video_note_data(
+                get_video_note_data(
                     message,
                     msg_info,
                     chat_export_name,
                     video_message_num
                 )
             elif message.audio is not None:
-                audio_data(message, msg_info, chat_export_name)
+                get_audio_data(message, msg_info, chat_export_name)
             elif message.voice is not None:
                 # TODO: voice_num is not correct because we read messages last to first
                 voice_num += 1
-                voice_data(messages, msg_info, chat_export_name, voice_num)
+                get_voice_data(messages, msg_info, chat_export_name, voice_num)
             elif message.document is not None:
-                document_data(message, msg_info, chat_export_name)
+                get_document_data(message, msg_info, chat_export_name)
 
             # TODO: add hashtag
             # TODO: add mentions
@@ -130,7 +132,7 @@ async def main():
             json.dump(chat_data, f, indent=4, default=str)
 
 
-def sticker_data(message: Message, msg_info: dict, chat_export_name: str):
+def get_sticker_data(message: Message, msg_info: dict, chat_export_name: str):
     if DOWNLOAD_MEDIA['sticker'] is True:
         media_dir = f'{chat_export_name}/stickers'
         os.makedirs(media_dir, exist_ok=True)
@@ -168,7 +170,12 @@ def sticker_data(message: Message, msg_info: dict, chat_export_name: str):
     msg_info['height'] = message.sticker.height
 
 
-def photo_data(message: Message, msg_info: dict, chat_export_name: str, photo_num: int):
+def get_photo_data(
+        message: Message,
+        msg_info: dict,
+        chat_export_name: str,
+        photo_num: int
+):
     if DOWNLOAD_MEDIA['photo'] is True:
         os.makedirs(f'{chat_export_name}/photos', exist_ok=True)
         date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
@@ -190,7 +197,7 @@ def photo_data(message: Message, msg_info: dict, chat_export_name: str, photo_nu
     msg_info['height'] = message.photo.height
 
 
-def video_data(message: Message, msg_info: dict, chat_export_name: str):
+def get_video_data(message: Message, msg_info: dict, chat_export_name: str):
     if DOWNLOAD_MEDIA['video'] is True:
         media_dir = f'{chat_export_name}/video_files'
         os.makedirs(
@@ -231,7 +238,7 @@ def video_data(message: Message, msg_info: dict, chat_export_name: str):
     msg_info['height'] = message.video.height
 
 
-def video_note_data(
+def get_video_note_data(
     message: Message,
     msg_info: dict,
     chat_export_name: str,
@@ -276,7 +283,7 @@ def video_note_data(
     msg_info['duration_seconds'] = message.video_note.duration
 
 
-def audio_data(message: Message, msg_info: dict, chat_export_name: str):
+def get_audio_data(message: Message, msg_info: dict, chat_export_name: str):
     if DOWNLOAD_MEDIA['audio'] is True:
         media_dir = f'{chat_export_name}/files'
         os.makedirs(
@@ -302,7 +309,7 @@ def audio_data(message: Message, msg_info: dict, chat_export_name: str):
     msg_info['duration_seconds'] = message.audio.duration
 
 
-def voice_data(
+def get_voice_data(
         message: Message,
         msg_info: dict,
         chat_export_name: str,
@@ -332,7 +339,7 @@ def voice_data(
     msg_info['duration_seconds'] = message.voice.duration
 
 
-def document_data(message: Message, msg_info: dict, chat_export_name: str):
+def get_document_data(message: Message, msg_info: dict, chat_export_name: str):
     if DOWNLOAD_MEDIA['document'] is True:
         media_dir = f'{chat_export_name}/files'
         os.makedirs(media_dir, exist_ok=True)
