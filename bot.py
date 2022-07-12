@@ -6,17 +6,17 @@ from datetime import datetime
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
-from config import APP_ID, API_HASH, DOWNLOAD_MEDIA
+from config import API_ID, API_HASH, DOWNLOAD_MEDIA
 
 app = Client(
     "my_bot",
-    api_id=APP_ID,
+    api_id=API_ID,
     api_hash=API_HASH,
 )
 
 # TODO: list of users
+# if you want to get "saved messages", use "me" or "myself"
 chat_ids = 'mo_ein'
-# chat_ids = 'me'
 
 
 async def main():
@@ -55,11 +55,10 @@ async def main():
 
         async for message in app.get_chat_history(chat_ids):
             # TODO: add initial message of channel
-            print(message)
+            # print(message)
             # print('clone!')
             msg_info = {}
             msg_info['id'] = message.id
-            # TODO: type format should be str???
             msg_info['type'] = 'message'
             # TODO: correct date
             msg_info['date'] = message.date.strftime('%Y-%m-%dT%H:%M:%S')
@@ -116,9 +115,6 @@ async def main():
             elif message.document is not None:
                 await get_document_data(message, msg_info, chat_export_name)
 
-            # TODO: add hashtag
-            # TODO: add mentions
-            # TODO: add links, hrefs...
             if message.text is not None:
                 text = get_text_data(message, 'text')
                 if text != []:
@@ -384,6 +380,7 @@ async def get_document_data(message: Message, msg_info: dict, chat_export_name: 
         msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
     msg_info['mime_type'] = message.document.mime_type
 
+
 def get_text_data(message: Message, text_mode: str) -> list:
     text = []
     if text_mode == 'caption':
@@ -397,7 +394,7 @@ def get_text_data(message: Message, text_mode: str) -> list:
         else:
             return text
 
-    #TODO: bug. remove entitiy part from all message
+    # TODO: bug. remove entitiy part from all message
     for e in entities:
         txt = {}
         if e.type == MessageEntityType.URL:
