@@ -34,8 +34,7 @@ async def main():
         chat_data = {}
         read_messages = True
 
-        if CHAT_EXPORT['contact'] is True:
-            global read_messages
+        if CHAT_EXPORT['contacts'] is True:
             read_messages = False
             # list
             contacts = await get_contact_data()
