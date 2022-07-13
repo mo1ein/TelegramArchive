@@ -6,7 +6,7 @@ from datetime import datetime
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
-from config import API_ID, API_HASH, DOWNLOAD_MEDIA
+from config import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT
 
 app = Client(
     "my_bot",
@@ -22,6 +22,7 @@ chat_ids = 'mo_ein'
 async def main():
     async with app:
         await app.send_message('me', 'ping!')
+
         chat = await app.get_chat(chat_ids)
         # print(chat)
 
@@ -31,14 +32,32 @@ async def main():
         username = ''
         messages = []
         chat_data = {}
+        read_messages = True
 
-        if chat.type == ChatType.PRIVATE:
+        if CHAT_EXPORT['contact'] is True:
+            global read_messages
+            read_messages = False
+            # list
+            contacts = await get_contact_data()
+            # TODO:
+            chat_data['about'] = ''
+
+            tmp = {}
+            # TODO:
+            tmp['about'] = ''
+            tmp['list'] = contacts
+            chat_data['contacts'] = tmp
+            # TODO:
+            chat_data['frequent_contacts'] = {}
+        elif (chat.type == ChatType.PRIVATE
+                and CHAT_EXPORT['personal_chat'] is True):
             user_info = await app.get_users(chat_ids)
             username = user_info.username
             chat_data['name'] = user_info.first_name
             chat_data['type'] = 'personal_chat'
             chat_data['id'] = user_info.id
-        elif chat.type == ChatType.CHANNEL:
+        elif (chat.type == ChatType.CHANNEL
+                and CHAT_EXPORT['public_channels'] is True):
             username = chat.username
             chat_data['name'] = chat.title
             chat_data['type'] = 'public_channel'
@@ -53,96 +72,98 @@ async def main():
         # TODO: when user want other path
         path = ''
 
-        async for message in app.get_chat_history(chat_ids):
-            # TODO: add initial message of channel
-            # print(message)
-            # print('clone!')
-            msg_info = {}
-            msg_info['id'] = message.id
-            msg_info['type'] = 'message'
-            # TODO: correct date
-            msg_info['date'] = message.date.strftime('%Y-%m-%dT%H:%M:%S')
-            msg_info['date_unixtime'] = convert_to_unixtime(message.date)
+        if read_messages:
+            async for message in app.get_chat_history(chat_ids):
+                # TODO: add initial message of channel
+                # print(message)
+                # print('clone!')
+                msg_info = {}
+                msg_info['id'] = message.id
+                msg_info['type'] = 'message'
+                # TODO: correct date
+                msg_info['date'] = message.date.strftime('%Y-%m-%dT%H:%M:%S')
+                msg_info['date_unixtime'] = convert_to_unixtime(message.date)
 
-            # set chat name
-            if chat.type != ChatType.CHANNEL:
-                name = ''
-                if message.from_user.first_name is not None:
-                    name += message.from_user.first_name
-                if message.from_user.last_name is not None:
-                    if name != '':
-                        name += f' {message.from_user.last_name}'
+                # set chat name
+                if chat.type != ChatType.CHANNEL:
+                    name = ''
+                    if message.from_user.first_name is not None:
+                        name += message.from_user.first_name
+                    if message.from_user.last_name is not None:
+                        if name != '':
+                            name += f' {message.from_user.last_name}'
+                        else:
+                            name += message.from_user.last_name
+                    msg_info['from'] = name
+                    msg_info['from_id'] = f'user{message.from_user.id}'
+                else:
+                    msg_info['from'] = chat.title
+                    if str(message.sender_chat.id).startswith('-100'):
+                        msg_info['from_id'] = f'channel{str(message.sender_chat.id)[4::]}'
+
+                if message.reply_to_message_id is not None:
+                    msg_info['reply_to_message_id'] = message.reply_to_message_id
+
+                if message.forward_from_chat is not None:
+                    msg_info['forwarded_from'] = message.forward_from_chat.title
+                elif message.forward_from is not None:
+                    msg_info['forwarded_from'] = message.forward_from.first_name
+
+                # TODO: media_type animation??
+
+                if message.sticker is not None:
+                    await get_sticker_data(message, msg_info, chat_export_name)
+                elif message.photo is not None:
+                    photo_num += 1
+                    await get_photo_data(message, msg_info, chat_export_name, photo_num)
+                elif message.video is not None:
+                    await get_video_data(message, msg_info, chat_export_name)
+                elif message.video_note is not None:
+                    video_message_num += 1
+                    await get_video_note_data(
+                        message,
+                        msg_info,
+                        chat_export_name,
+                        video_message_num
+                    )
+                elif message.audio is not None:
+                    await get_audio_data(message, msg_info, chat_export_name)
+                elif message.voice is not None:
+                    # TODO: voice_num is not correct because we read messages last to first
+                    voice_num += 1
+                    await get_voice_data(message, msg_info, chat_export_name, voice_num)
+                elif message.document is not None:
+                    await get_document_data(message, msg_info, chat_export_name)
+
+                # TODO: contacts media_type
+                if message.text is not None:
+                    text = get_text_data(message, 'text')
+                    if text != []:
+                        text.append(message.text)
+                        msg_info['text'] = text
                     else:
-                        name += message.from_user.last_name
-                msg_info['from'] = name
-                msg_info['from_id'] = f'user{message.from_user.id}'
-            else:
-                msg_info['from'] = chat.title
-                if str(message.sender_chat.id).startswith('-100'):
-                    msg_info['from_id'] = f'channel{str(message.sender_chat.id)[4::]}'
-
-            if message.reply_to_message_id is not None:
-                msg_info['reply_to_message_id'] = message.reply_to_message_id
-
-            if message.forward_from_chat is not None:
-                msg_info['forwarded_from'] = message.forward_from_chat.title
-            elif message.forward_from is not None:
-                msg_info['forwarded_from'] = message.forward_from.first_name
-
-            # TODO: media_type animation??
-
-            if message.sticker is not None:
-                await get_sticker_data(message, msg_info, chat_export_name)
-            elif message.photo is not None:
-                photo_num += 1
-                await get_photo_data(message, msg_info, chat_export_name, photo_num)
-            elif message.video is not None:
-                await get_video_data(message, msg_info, chat_export_name)
-            elif message.video_note is not None:
-                video_message_num += 1
-                await get_video_note_data(
-                    message,
-                    msg_info,
-                    chat_export_name,
-                    video_message_num
-                )
-            elif message.audio is not None:
-                await get_audio_data(message, msg_info, chat_export_name)
-            elif message.voice is not None:
-                # TODO: voice_num is not correct because we read messages last to first
-                voice_num += 1
-                await get_voice_data(message, msg_info, chat_export_name, voice_num)
-            elif message.document is not None:
-                await get_document_data(message, msg_info, chat_export_name)
-
-            if message.text is not None:
-                text = get_text_data(message, 'text')
-                if text != []:
-                    text.append(message.text)
-                    msg_info['text'] = text
+                        msg_info['text'] = message.text
+                elif message.caption is not None:
+                    text = get_text_data(message, 'caption')
+                    if text != []:
+                        text.append(message.caption)
+                        msg_info['text'] = text
+                    else:
+                        msg_info['text'] = message.caption
                 else:
-                    msg_info['text'] = message.text
-            elif message.caption is not None:
-                text = get_text_data(message, 'caption')
-                if text != []:
-                    text.append(message.caption)
-                    msg_info['text'] = text
-                else:
-                    msg_info['text'] = message.caption
-            else:
-                msg_info['text'] = ''
+                    msg_info['text'] = ''
 
-            messages.append(msg_info)
-            # for start first message in json
-            messages.reverse()
-            chat_data['messages'] = messages
+                messages.append(msg_info)
+                # for start first message in json
+                messages.reverse()
+                chat_data['messages'] = messages
 
         with open('output.json', mode='w') as f:
             json.dump(chat_data, f, indent=4, default=str)
 
 
 async def get_sticker_data(message: Message, msg_info: dict, chat_export_name: str):
-    if DOWNLOAD_MEDIA['sticker'] is True:
+    if MEDIA_EXPORT['sticker'] is True:
         media_dir = f'{chat_export_name}/stickers'
         os.makedirs(media_dir, exist_ok=True)
         sticker_name = f'{media_dir}/{message.sticker.file_name}'
@@ -185,7 +206,7 @@ async def get_photo_data(
         chat_export_name: str,
         photo_num: int
 ):
-    if DOWNLOAD_MEDIA['photo'] is True:
+    if MEDIA_EXPORT['photo'] is True:
         os.makedirs(f'{chat_export_name}/photos', exist_ok=True)
         date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
         # TODO: what format for png??
@@ -207,7 +228,7 @@ async def get_photo_data(
 
 
 async def get_video_data(message: Message, msg_info: dict, chat_export_name: str):
-    if DOWNLOAD_MEDIA['video'] is True:
+    if MEDIA_EXPORT['video'] is True:
         media_dir = f'{chat_export_name}/video_files'
         os.makedirs(
             media_dir,
@@ -253,7 +274,7 @@ async def get_video_note_data(
     chat_export_name: str,
     video_message_num: int
 ):
-    if DOWNLOAD_MEDIA['video_message'] is True:
+    if MEDIA_EXPORT['video_message'] is True:
         # TODO: video_message_num is not correct because we read messages last to first
         media_dir = f'{chat_export_name}/round_video_messages'
         os.makedirs(
@@ -293,7 +314,7 @@ async def get_video_note_data(
 
 
 async def get_audio_data(message: Message, msg_info: dict, chat_export_name: str):
-    if DOWNLOAD_MEDIA['audio'] is True:
+    if MEDIA_EXPORT['audio'] is True:
         media_dir = f'{chat_export_name}/files'
         os.makedirs(
             media_dir,
@@ -324,7 +345,7 @@ async def get_voice_data(
         chat_export_name: str,
         voice_num: int
 ):
-    if DOWNLOAD_MEDIA['voice_message'] is True:
+    if MEDIA_EXPORT['voice_message'] is True:
         media_dir = f'{chat_export_name}/voice_messages'
         os.makedirs(
             media_dir,
@@ -349,7 +370,7 @@ async def get_voice_data(
 
 
 async def get_document_data(message: Message, msg_info: dict, chat_export_name: str):
-    if DOWNLOAD_MEDIA['document'] is True:
+    if MEDIA_EXPORT['document'] is True:
         media_dir = f'{chat_export_name}/files'
         os.makedirs(media_dir, exist_ok=True)
         doc_name = f'{media_dir}/{message.document.file_name}'
@@ -450,6 +471,32 @@ def get_text_data(message: Message, text_mode: str) -> list:
             txt['text'] = message.caption[e.offset:e.length]
         text.append(txt)
     return text
+
+
+async def get_contact_data() -> list:
+    contacts = await app.get_contacts()
+    all_contacts = []
+    for c in contacts:
+        user = {}
+        # TODO: add date and date_unixtime
+        if c.first_name is not None:
+            user['first_name'] = c.first_name
+        else:
+            user['first_name'] = ''
+
+        if c.last_name is not None:
+            user['last_name'] = c.last_name
+        else:
+            user['last_name'] = ''
+
+        if c.phone_number is not None:
+            user['phone_number'] = c.phone_number
+        else:
+            user['phone_number'] = ''
+
+        all_contacts.append(user)
+    # TODO: convert to vcf
+    return all_contacts
 
 
 def convert_to_unixtime(date: datetime):
