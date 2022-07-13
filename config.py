@@ -16,7 +16,7 @@ MEDIA_EXPORT = {
 }
 
 CHAT_EXPORT = {
-    'contacts': True,
+    'contacts': False,
     'personal_chats': True,
     'public_channels': True,
     'public_groups': True,

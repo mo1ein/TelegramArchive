@@ -16,7 +16,8 @@ app = Client(
 
 # TODO: list of users
 # if you want to get "saved messages", use "me" or "myself"
-chat_ids = 'mo_ein'
+# chat_ids = 'mo_ein'
+chat_ids = 'GolangEngineer'
 
 
 async def main():
@@ -34,8 +35,7 @@ async def main():
         chat_data = {}
         read_messages = True
 
-        if CHAT_EXPORT['contact'] is True:
-            global read_messages
+        if CHAT_EXPORT['contacts'] is True:
             read_messages = False
             # list
             contacts = await get_contact_data()
@@ -97,20 +97,21 @@ async def main():
         path = ''
 
         if read_messages:
-            all_messages = await app.get_chat_history(chat_ids)
             # read messages from first to last
-            for message in reversed(all_messages):
+            all_messages = [m async for m in app.get_chat_history(chat_ids)]
+            all_messages.reverse()
+            for message in all_messages:
                 # TODO: add initial message of channel
                 # print(message)
                 # print('clone!')
                 msg_info = {}
                 msg_info['id'] = message.id
                 msg_info['type'] = 'message'
-                # TODO: correct date
                 msg_info['date'] = message.date.strftime('%Y-%m-%dT%H:%M:%S')
                 msg_info['date_unixtime'] = convert_to_unixtime(message.date)
 
                 # set chat name
+                # this part is so shitty fix THIS
                 if chat.type == ChatType.PRIVATE:
                     name = ''
                     if message.from_user.first_name is not None:
@@ -125,16 +126,15 @@ async def main():
                 else:
                     msg_info['from'] = chat.title
                     # TODO: is this correct for groups?
-                    if str(message.sender_chat.id).startswith('-100'):
-                        if chat.type == ChatType.CHANNEL:
+                    if chat.type == ChatType.CHANNEL:
+                        if str(message.sender_chat.id).startswith('-100'):
                             msg_info['from_id'] = f'channel{str(message.sender_chat.id)[4::]}'
                         else:
-                            msg_info['from_id'] = f'user{str(message.sender_chat.id)[4::]}'
-                    else:
-                        if chat.type == ChatType.CHANNEL:
                             msg_info['from_id'] = f'channel{str(message.sender_chat.id)}'
-                        else:
-                            msg_info['from_id'] = f'user{str(message.sender_chat.id)}'
+                    else:
+                        pass
+                        # print(message)
+                        # TODO: use from user...
 
                 if message.reply_to_message_id is not None:
                     msg_info['reply_to_message_id'] = message.reply_to_message_id
@@ -190,8 +190,6 @@ async def main():
                     msg_info['text'] = ''
 
                 messages.append(msg_info)
-                # for start first message in json
-                messages.reverse()
                 chat_data['messages'] = messages
 
         with open('output.json', mode='w') as f:
@@ -199,7 +197,7 @@ async def main():
 
 
 async def get_sticker_data(message: Message, msg_info: dict, chat_export_name: str):
-    if MEDIA_EXPORT['sticker'] is True:
+    if MEDIA_EXPORT['stickers'] is True:
         media_dir = f'{chat_export_name}/stickers'
         os.makedirs(media_dir, exist_ok=True)
         sticker_name = f'{media_dir}/{message.sticker.file_name}'
@@ -242,7 +240,7 @@ async def get_photo_data(
         chat_export_name: str,
         photo_num: int
 ):
-    if MEDIA_EXPORT['photo'] is True:
+    if MEDIA_EXPORT['photos'] is True:
         os.makedirs(f'{chat_export_name}/photos', exist_ok=True)
         date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
         # TODO: what format for png??
@@ -264,7 +262,7 @@ async def get_photo_data(
 
 
 async def get_video_data(message: Message, msg_info: dict, chat_export_name: str):
-    if MEDIA_EXPORT['video'] is True:
+    if MEDIA_EXPORT['videos'] is True:
         media_dir = f'{chat_export_name}/video_files'
         os.makedirs(
             media_dir,
@@ -310,7 +308,7 @@ async def get_video_note_data(
     chat_export_name: str,
     video_message_num: int
 ):
-    if MEDIA_EXPORT['video_message'] is True:
+    if MEDIA_EXPORT['video_messages'] is True:
         # TODO: video_message_num is not correct because we read messages last to first
         media_dir = f'{chat_export_name}/round_video_messages'
         os.makedirs(
@@ -350,7 +348,7 @@ async def get_video_note_data(
 
 
 async def get_audio_data(message: Message, msg_info: dict, chat_export_name: str):
-    if MEDIA_EXPORT['audio'] is True:
+    if MEDIA_EXPORT['audios'] is True:
         media_dir = f'{chat_export_name}/files'
         os.makedirs(
             media_dir,
@@ -381,7 +379,7 @@ async def get_voice_data(
         chat_export_name: str,
         voice_num: int
 ):
-    if MEDIA_EXPORT['voice_message'] is True:
+    if MEDIA_EXPORT['voice_messages'] is True:
         media_dir = f'{chat_export_name}/voice_messages'
         os.makedirs(
             media_dir,
@@ -406,7 +404,7 @@ async def get_voice_data(
 
 
 async def get_document_data(message: Message, msg_info: dict, chat_export_name: str):
-    if MEDIA_EXPORT['document'] is True:
+    if MEDIA_EXPORT['documents'] is True:
         media_dir = f'{chat_export_name}/files'
         os.makedirs(media_dir, exist_ok=True)
         doc_name = f'{media_dir}/{message.document.file_name}'
