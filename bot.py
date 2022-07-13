@@ -34,7 +34,8 @@ async def main():
         chat_data = {}
         read_messages = True
 
-        if CHAT_EXPORT['contacts'] is True:
+        if CHAT_EXPORT['contact'] is True:
+            global read_messages
             read_messages = False
             # list
             contacts = await get_contact_data()
@@ -60,11 +61,35 @@ async def main():
             username = chat.username
             chat_data['name'] = chat.title
             chat_data['type'] = 'public_channel'
-
             # when using telegram api ids have -100 prefix
             # https://stackoverflow.com/questions/33858927/how-to-obtain-the-chat-id-of-a-private-telegram-channel
             if str(chat.id).startswith('-100'):
                 chat_data['id'] = str(chat.id)[4::]
+            else:
+                chat_data['id'] = chat.id
+        elif (chat.type == ChatType.GROUP
+                and CHAT_EXPORT['public_groups'] is True):
+            username = chat.username
+            chat_data['name'] = chat.title
+            chat_data['type'] = 'public_group'
+            if str(chat.id).startswith('-100'):
+                chat_data['id'] = str(chat.id)[4::]
+            else:
+                chat_data['id'] = chat.id
+        elif (chat.type == ChatType.SUPERGROUP
+                and CHAT_EXPORT['public_groups'] is True):
+            # TODO: fix negetive in ids
+            username = chat.username
+            chat_data['name'] = chat.title
+            chat_data['type'] = 'public_supergroup'
+            if str(chat.id).startswith('-100'):
+                chat_data['id'] = str(chat.id)[4::]
+            else:
+                chat_data['id'] = chat.id
+        # TODO: private SUPERGROUP and GROUP
+        else:
+            # bot
+            pass
 
         chat_export_date = datetime.now().strftime("%Y-%m-%d")
         chat_export_name = f'ChatExport_{username}_{chat_export_date}'
@@ -72,7 +97,9 @@ async def main():
         path = ''
 
         if read_messages:
-            async for message in app.get_chat_history(chat_ids):
+            all_messages = await app.get_chat_history(chat_ids)
+            # read messages from first to last
+            for message in reversed(all_messages):
                 # TODO: add initial message of channel
                 # print(message)
                 # print('clone!')
@@ -84,7 +111,7 @@ async def main():
                 msg_info['date_unixtime'] = convert_to_unixtime(message.date)
 
                 # set chat name
-                if chat.type != ChatType.CHANNEL:
+                if chat.type == ChatType.PRIVATE:
                     name = ''
                     if message.from_user.first_name is not None:
                         name += message.from_user.first_name
@@ -97,8 +124,17 @@ async def main():
                     msg_info['from_id'] = f'user{message.from_user.id}'
                 else:
                     msg_info['from'] = chat.title
+                    # TODO: is this correct for groups?
                     if str(message.sender_chat.id).startswith('-100'):
-                        msg_info['from_id'] = f'channel{str(message.sender_chat.id)[4::]}'
+                        if chat.type == ChatType.CHANNEL:
+                            msg_info['from_id'] = f'channel{str(message.sender_chat.id)[4::]}'
+                        else:
+                            msg_info['from_id'] = f'user{str(message.sender_chat.id)[4::]}'
+                    else:
+                        if chat.type == ChatType.CHANNEL:
+                            msg_info['from_id'] = f'channel{str(message.sender_chat.id)}'
+                        else:
+                            msg_info['from_id'] = f'user{str(message.sender_chat.id)}'
 
                 if message.reply_to_message_id is not None:
                     msg_info['reply_to_message_id'] = message.reply_to_message_id
@@ -109,6 +145,7 @@ async def main():
                     msg_info['forwarded_from'] = message.forward_from.first_name
 
                 # TODO: media_type animation??
+                # TODO: type service. actor...
 
                 if message.sticker is not None:
                     await get_sticker_data(message, msg_info, chat_export_name)
