@@ -16,11 +16,11 @@ app = Client(
 
 # TODO: list of users
 # if you want to get "saved messages", use "me" or "myself"
-# chat_ids = 'mo_ein'
-chat_ids = 'GolangEngineer'
+chat_ids = 'mo_ein'
 
 
 async def main():
+    # with should delete??
     async with app:
         await app.send_message('me', 'ping!')
 
@@ -78,7 +78,6 @@ async def main():
                 chat_data['id'] = chat.id
         elif (chat.type == ChatType.SUPERGROUP
                 and CHAT_EXPORT['public_groups'] is True):
-            # TODO: fix negetive in ids
             username = chat.username
             chat_data['name'] = chat.title
             chat_data['type'] = 'public_supergroup'
@@ -165,7 +164,6 @@ async def main():
                 elif message.audio is not None:
                     await get_audio_data(message, msg_info, chat_export_name)
                 elif message.voice is not None:
-                    # TODO: voice_num is not correct because we read messages last to first
                     voice_num += 1
                     await get_voice_data(message, msg_info, chat_export_name, voice_num)
                 elif message.document is not None:
