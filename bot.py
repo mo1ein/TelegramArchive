@@ -167,7 +167,7 @@ async def main():
                     await get_photo_data(
                         message,
                         msg_info,
-                        photo_num
+                        names
                     )
                 elif message.video is not None:
                     names = generate_file_name(message, 'video', username)
