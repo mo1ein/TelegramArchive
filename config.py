@@ -24,4 +24,5 @@ CHAT_EXPORT = {
     'private_channels': True,
     'private_groups': True,
 }
-# TODO: add const sentences for print
+
+FILE_NOT_FOUND = '(File not included. Change data exporting settings to download.)'

@@ -6,7 +6,7 @@ from datetime import datetime
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
-from config import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT
+from config import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, FILE_NOT_FOUND
 
 app = Client(
     "my_bot",
@@ -248,7 +248,7 @@ async def get_sticker_data(
             msg_info['file'] = sticker_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['file'] = FILE_NOT_FOUND
 
         if message.video.thumbs is not None:
             try:
@@ -260,12 +260,12 @@ async def get_sticker_data(
                 msg_info['thumbnail'] = thumb_relative_path
             except ValueError:
                 print("Oops can't download media!")
-                msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+                msg_info['thumbnail'] = FILE_NOT_FOUND
         else:
-            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['thumbnail'] = FILE_NOT_FOUND
     else:
-        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['file'] = FILE_NOT_FOUND
+        msg_info['thumbnail'] = FILE_NOT_FOUND
     msg_info['media_type'] = 'sticker'
     msg_info['sticker_emoji'] = message.sticker.emoji
     msg_info['width'] = message.sticker.width
@@ -287,7 +287,7 @@ async def get_animation_data(
             msg_info['file'] = animation_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['file'] = FILE_NOT_FOUND
 
         if message.video.thumbs is not None:
             try:
@@ -298,13 +298,13 @@ async def get_animation_data(
                 msg_info['thumbnail'] = thumb_relative_path
             except ValueError:
                 print("Oops can't download media!")
-                msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+                msg_info['thumbnail'] = FILE_NOT_FOUND
         else:
-            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['thumbnail'] = FILE_NOT_FOUND
 
     else:
-        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['file'] = FILE_NOT_FOUND
+        msg_info['thumbnail'] = FILE_NOT_FOUND
     msg_info['media_type'] = 'animation'
     msg_info['mime_type'] = message.animation.mime_type
     msg_info['width'] = message.animation.width
@@ -326,9 +326,9 @@ async def get_photo_data(
             msg_info['photo'] = photo_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['photo'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['photo'] = FILE_NOT_FOUND
     else:
-        msg_info['photo'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['photo'] = FILE_NOT_FOUND
     msg_info['width'] = message.photo.width
     msg_info['height'] = message.photo.height
 
@@ -348,7 +348,7 @@ async def get_video_data(
             msg_info['file'] = video_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['file'] = FILE_NOT_FOUND
 
         if message.video.thumbs is not None:
             try:
@@ -359,12 +359,12 @@ async def get_video_data(
                 msg_info['thumbnail'] = thumb_relative_path
             except ValueError:
                 print("Oops can't download media!")
-                msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+                msg_info['thumbnail'] = FILE_NOT_FOUND
         else:
-            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['thumbnail'] = FILE_NOT_FOUND
     else:
-        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['file'] = FILE_NOT_FOUND
+        msg_info['thumbnail'] = FILE_NOT_FOUND
     msg_info['media_type'] = 'video_file'
     msg_info['mime_type'] = message.video.mime_type
     msg_info['duration_seconds'] = message.video.duration
@@ -387,7 +387,7 @@ async def get_video_note_data(
             msg_info['file'] = vnote_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['file'] = FILE_NOT_FOUND
 
         if message.video_note.thumbs is not None:
             try:
@@ -398,12 +398,12 @@ async def get_video_note_data(
                 msg_info['thumbnail'] = thumb_relative_path
             except ValueError:
                 print("Oops can't download media!")
-                msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+                msg_info['thumbnail'] = FILE_NOT_FOUND
         else:
-            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['thumbnail'] = FILE_NOT_FOUND
     else:
-        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['file'] = FILE_NOT_FOUND
+        msg_info['thumbnail'] = FILE_NOT_FOUND
     msg_info['media_type'] = 'video_message'
     msg_info['mime_type'] = message.video_note.mime_type
     msg_info['duration_seconds'] = message.video_note.duration
@@ -424,7 +424,7 @@ async def get_audio_data(
             msg_info['file'] = audio_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['file'] = FILE_NOT_FOUND
 
         if message.audio.thumbs is not None:
             try:
@@ -435,12 +435,12 @@ async def get_audio_data(
                 msg_info['thumbnail'] = thumb_relative_path
             except ValueError:
                 print("Oops can't download media!")
-                msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+                msg_info['thumbnail'] = FILE_NOT_FOUND
         else:
-            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['thumbnail'] = FILE_NOT_FOUND
     else:
-        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['file'] = FILE_NOT_FOUND
+        msg_info['thumbnail'] = FILE_NOT_FOUND
     msg_info['media_type'] = 'audio_file'
     msg_info['performer'] = message.audio.performer
     msg_info['title'] = message.audio.title
@@ -463,9 +463,9 @@ async def get_voice_data(
             msg_info['file'] = voice_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['file'] = FILE_NOT_FOUND
     else:
-        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['file'] = FILE_NOT_FOUND
     msg_info['media_type'] = 'voice_message'
     msg_info['mime_type'] = message.voice.mime_type
     msg_info['duration_seconds'] = message.voice.duration
@@ -486,7 +486,7 @@ async def get_document_data(
             msg_info['file'] = doc_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['file'] = FILE_NOT_FOUND
 
         if message.document.thumbs is not None:
             try:
@@ -497,13 +497,12 @@ async def get_document_data(
                 msg_info['thumbnail'] = thumb_relative_path
             except ValueError:
                 print("Oops can't download media!")
-                msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+                msg_info['thumbnail'] = FILE_NOT_FOUND
         else:
-            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+            msg_info['thumbnail'] = FILE_NOT_FOUND
     else:
-        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
-        # TODO: if have thumbnail??
-        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['file'] = FILE_NOT_FOUND
+        msg_info['thumbnail'] = FILE_NOT_FOUND
     msg_info['mime_type'] = message.document.mime_type
 
 
@@ -712,11 +711,11 @@ def generate_file_name(
         )
         return result
 
-   elif file_type == 'sticker':
+    elif file_type == 'sticker':
         media_dir = f'{chat_export_name}/stickers'
         os.makedirs(media_dir, exist_ok=True)
 
-        if message.document.file_name is not None:
+        if message.sticker.file_name is not None:
             sticker_name = message.sticker.file_name
             sticker_path = f'{media_dir}/{sticker_name}'
         else:
@@ -731,7 +730,7 @@ def generate_file_name(
             thumb_name = None
             thumb_path = None
 
-        sticker_relative_path = f'stickers/{audio_name}'
+        sticker_relative_path = f'stickers/{sticker_name}'
         thumb_relative_path = f'stickers/{thumb_name}'
 
         result = (
@@ -820,7 +819,7 @@ def generate_file_name(
 
         result = doc_path, thumb_path, doc_relative_path, thumb_relative_path
         return result
-    
+
 
 def convert_to_unixtime(date: datetime):
     # telegram date format: "2022-07-10 08:49:23"
