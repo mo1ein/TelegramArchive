@@ -51,7 +51,7 @@ async def main():
             # TODO:
             chat_data['frequent_contacts'] = {}
         elif (chat.type == ChatType.PRIVATE
-                and CHAT_EXPORT['personal_chat'] is True):
+                and CHAT_EXPORT['personal_chats'] is True):
             user_info = await app.get_users(chat_ids)
             username = user_info.username
             chat_data['name'] = user_info.first_name
@@ -192,7 +192,7 @@ async def main():
                     voice_num += 1
                     names = generate_file_name(
                         message,
-                        'audio',
+                        'voice',
                         username,
                         voice_num
                     )
@@ -250,7 +250,7 @@ async def get_sticker_data(
             print("Oops can't download media!")
             msg_info['file'] = FILE_NOT_FOUND
 
-        if message.video.thumbs is not None:
+        if message.sticker.thumbs is not None:
             try:
                 # TODO: None returned??
                 await app.download_media(
@@ -281,7 +281,7 @@ async def get_animation_data(
         animation_path, thumb_path, animation_relative_path, thumb_relative_path = names
         try:
             await app.download_media(
-                message.sticker.file_id,
+                message.animation.file_id,
                 animation_path
             )
             msg_info['file'] = animation_relative_path
@@ -289,7 +289,7 @@ async def get_animation_data(
             print("Oops can't download media!")
             msg_info['file'] = FILE_NOT_FOUND
 
-        if message.video.thumbs is not None:
+        if message.animation.thumbs is not None:
             try:
                 await app.download_media(
                     message.animation.thumbs[0].file_id,
@@ -429,7 +429,7 @@ async def get_audio_data(
         if message.audio.thumbs is not None:
             try:
                 await app.download_media(
-                    message.document.thumbs[0].file_id,
+                    message.audio.thumbs[0].file_id,
                     thumb_path
                 )
                 msg_info['thumbnail'] = thumb_relative_path
@@ -619,15 +619,11 @@ def generate_file_name(
     if file_type == 'photo':
         media_dir = f'{chat_export_name}/photos'
         os.makedirs(media_dir, exist_ok=True)
-        if message.photo.file_name is not None:
-            photo_name = message.photo.file_name
-            photo_path = f'{media_dir}/{photo_name}'
-        else:
-            date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-            # TODO: what format for png??
-            photo_name = f'file_{media_num}@{date}.jpg'
-            photo_path = f'{chat_export_name}/photos/{photo_name}'
 
+        date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+        # TODO: what format for png??
+        photo_name = f'file_{media_num}@{date}.jpg'
+        photo_path = f'{chat_export_name}/photos/{photo_name}'
         photo_relative_path = f'photos/{photo_name}'
 
         result = (
@@ -669,14 +665,9 @@ def generate_file_name(
         media_dir = f'{chat_export_name}/voice_messages'
         os.makedirs(media_dir, exist_ok=True)
 
-        if message.document.file_name is not None:
-            voice_name = message.voice.file_name
-            voice_path = f'{media_dir}/{voice_name}'
-        else:
-            date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-            voice_name = f'audio_{voice_num}@{date}.ogg'
-            voice_path = f'{media_dir}/{voice_name}'
-
+        date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+        voice_name = f'audio_{media_num}@{date}.ogg'
+        voice_path = f'{media_dir}/{voice_name}'
         voice_relative_path = f'voice_messages/{voice_name}'
 
         result = voice_path, voice_relative_path
@@ -685,13 +676,11 @@ def generate_file_name(
     elif file_type == 'video_note':
         media_dir = f'{chat_export_name}/round_video_messages'
         os.makedirs(media_dir, exist_ok=True)
-        if message.video_note.file_name is not None:
-            vnote_name = message.video_note.file_name
-            vnote_path = f'{media_dir}/{vnote_name}'
-        else:
-            date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-            vnote_name = f'file_{media_num}@{date}.mp4'
-            vnote_path = f'{media_dir}/{vnote_name}'
+
+        # TODO: by default don't have name
+        date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+        vnote_name = f'file_{media_num}@{date}.mp4'
+        vnote_path = f'{media_dir}/{vnote_name}'
 
         if message.video_note.thumbs is not None:
             thumb_name = f'{vnote_name}_thumb.jpg'
@@ -813,6 +802,7 @@ def generate_file_name(
             thumb_path = f'{media_dir}/{thumb_name}'
         else:
             thumb_name = None
+            thumb_path = None
 
         doc_relative_path = f'files/{doc_name}'
         thumb_relative_path = f'files/{thumb_name}'
