@@ -16,6 +16,7 @@ app = Client(
 
 # TODO: list of users
 # if you want to get "saved messages", use "me" or "myself"
+# TODO: ids with number must be int fix that
 chat_ids = 'mo_ein'
 
 
@@ -96,6 +97,7 @@ async def main():
         path = ''
 
         if read_messages:
+            # TODO: add exception for private channels
             # read messages from first to last
             all_messages = [m async for m in app.get_chat_history(chat_ids)]
             all_messages.reverse()
@@ -143,14 +145,24 @@ async def main():
                 elif message.forward_from is not None:
                     msg_info['forwarded_from'] = message.forward_from.first_name
 
-                # TODO: media_type animation??
                 # TODO: type service. actor...
 
                 if message.sticker is not None:
                     await get_sticker_data(message, msg_info, chat_export_name)
+                elif message.animation is not None:
+                    await get_animation_data(
+                        message,
+                        msg_info,
+                        chat_export_name
+                    )
                 elif message.photo is not None:
                     photo_num += 1
-                    await get_photo_data(message, msg_info, chat_export_name, photo_num)
+                    await get_photo_data(
+                        message,
+                        msg_info,
+                        chat_export_name,
+                        photo_num
+                    )
                 elif message.video is not None:
                     await get_video_data(message, msg_info, chat_export_name)
                 elif message.video_note is not None:
@@ -165,11 +177,19 @@ async def main():
                     await get_audio_data(message, msg_info, chat_export_name)
                 elif message.voice is not None:
                     voice_num += 1
-                    await get_voice_data(message, msg_info, chat_export_name, voice_num)
+                    await get_voice_data(
+                        message,
+                        msg_info,
+                        chat_export_name,
+                        voice_num
+                    )
                 elif message.document is not None:
-                    await get_document_data(message, msg_info, chat_export_name)
+                    await get_document_data(
+                        message,
+                        msg_info,
+                        chat_export_name
+                    )
 
-                # TODO: contacts media_type
                 if message.text is not None:
                     text = get_text_data(message, 'text')
                     if text != []:
@@ -194,13 +214,16 @@ async def main():
             json.dump(chat_data, f, indent=4, default=str)
 
 
-async def get_sticker_data(message: Message, msg_info: dict, chat_export_name: str):
+async def get_sticker_data(
+    message: Message,
+    msg_info: dict,
+    chat_export_name: str
+) -> None:
     if MEDIA_EXPORT['stickers'] is True:
         media_dir = f'{chat_export_name}/stickers'
         os.makedirs(media_dir, exist_ok=True)
         sticker_name = f'{media_dir}/{message.sticker.file_name}'
         try:
-            # TODO: None returned??
             await app.download_media(
                 message.sticker.file_id,
                 sticker_name
@@ -232,6 +255,46 @@ async def get_sticker_data(message: Message, msg_info: dict, chat_export_name: s
     msg_info['height'] = message.sticker.height
 
 
+async def get_animation_data(
+    message: Message,
+    msg_info: dict,
+    chat_export_name: str
+) -> None:
+    if MEDIA_EXPORT['animations'] is True:
+        media_dir = f'{chat_export_name}/video_files'
+        os.makedirs(media_dir, exist_ok=True)
+        # TODO: if not have name
+        animation_name = f'{media_dir}/{message.animation.file_name}'
+        try:
+            await app.download_media(
+                message.sticker.file_id,
+                animation_name
+            )
+            msg_info['file'] = f'video_files/{message.animation.file_name}'
+        except ValueError:
+            print("Oops can't download media!")
+            msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+
+        thumbnail_name = f'{media_dir}/{message.animation.file_name}_thumb.jpg'
+        try:
+            await app.download_media(
+                message.animation.thumbs[0].file_id,
+                thumbnail_name
+            )
+            msg_info['thumbnail'] = f'video_files/{message.animation.file_name}_thumb.jpg'
+        except ValueError:
+            print("Oops can't download media!")
+            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+
+    else:
+        msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+    msg_info['media_type'] = 'animation'
+    msg_info['mime_type'] = message.animation.mime_type
+    msg_info['width'] = message.animation.width
+    msg_info['height'] = message.animation.height
+
+
 async def get_photo_data(
         message: Message,
         msg_info: dict,
@@ -259,7 +322,11 @@ async def get_photo_data(
     msg_info['height'] = message.photo.height
 
 
-async def get_video_data(message: Message, msg_info: dict, chat_export_name: str):
+async def get_video_data(
+    message: Message,
+    msg_info: dict,
+    chat_export_name: str
+) -> None:
     if MEDIA_EXPORT['videos'] is True:
         media_dir = f'{chat_export_name}/video_files'
         os.makedirs(
@@ -268,7 +335,6 @@ async def get_video_data(message: Message, msg_info: dict, chat_export_name: str
         )
         video_name = f'{media_dir}/{message.video.file_name}'
         try:
-            # TODO: None returned??
             await app.download_media(
                 message.video.file_id,
                 video_name
@@ -279,9 +345,7 @@ async def get_video_data(message: Message, msg_info: dict, chat_export_name: str
             msg_info['file'] = "(File not included. Change data exporting settings to download.)"
 
         thumbnail_name = f'{media_dir}/{message.video.file_name}_thumb.jpg'
-        # TODO: if have thumb?
         try:
-            # TODO: None returned??
             await app.download_media(
                 message.video.thumbs[0].file_id,
                 thumbnail_name
@@ -307,7 +371,6 @@ async def get_video_note_data(
     video_message_num: int
 ):
     if MEDIA_EXPORT['video_messages'] is True:
-        # TODO: video_message_num is not correct because we read messages last to first
         media_dir = f'{chat_export_name}/round_video_messages'
         os.makedirs(
             media_dir,
@@ -345,7 +408,11 @@ async def get_video_note_data(
     msg_info['duration_seconds'] = message.video_note.duration
 
 
-async def get_audio_data(message: Message, msg_info: dict, chat_export_name: str):
+async def get_audio_data(
+    message: Message,
+    msg_info: dict,
+    chat_export_name: str
+) -> None:
     if MEDIA_EXPORT['audios'] is True:
         media_dir = f'{chat_export_name}/files'
         os.makedirs(
@@ -401,7 +468,11 @@ async def get_voice_data(
     msg_info['duration_seconds'] = message.voice.duration
 
 
-async def get_document_data(message: Message, msg_info: dict, chat_export_name: str):
+async def get_document_data(
+    message: Message,
+    msg_info: dict,
+    chat_export_name: str
+) -> None:
     if MEDIA_EXPORT['documents'] is True:
         media_dir = f'{chat_export_name}/files'
         os.makedirs(media_dir, exist_ok=True)
@@ -505,6 +576,7 @@ def get_text_data(message: Message, text_mode: str) -> list:
     return text
 
 
+# TODO: fix List[str]
 async def get_contact_data() -> list:
     contacts = await app.get_contacts()
     all_contacts = []

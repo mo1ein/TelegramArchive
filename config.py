@@ -9,6 +9,7 @@ MEDIA_EXPORT = {
     'videos': False,
     'photos': False,
     'stickers': False,
+    'animations': True,
     'documents': False,
     'voice_messages': False,
     'video_messages': False,
