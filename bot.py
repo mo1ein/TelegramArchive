@@ -91,11 +91,6 @@ async def main():
             # bot
             pass
 
-        chat_export_date = datetime.now().strftime("%Y-%m-%d")
-        chat_export_name = f'ChatExport_{username}_{chat_export_date}'
-        # TODO: when user want other path
-        path = ''
-
         if read_messages:
             # TODO: add exception for private channels
             # read messages from first to last
@@ -148,46 +143,70 @@ async def main():
                 # TODO: type service. actor...
 
                 if message.sticker is not None:
-                    await get_sticker_data(message, msg_info, chat_export_name)
+                    names = generate_file_name(
+                        message,
+                        'sticker',
+                        username
+                    )
+                    await get_sticker_data(message, msg_info, names)
                 elif message.animation is not None:
+                    names = generate_file_name(message, 'animation', username)
                     await get_animation_data(
                         message,
                         msg_info,
-                        chat_export_name
+                        names
                     )
                 elif message.photo is not None:
                     photo_num += 1
+                    names = generate_file_name(
+                        message,
+                        'photo',
+                        username,
+                        photo_num
+                    )
                     await get_photo_data(
                         message,
                         msg_info,
-                        chat_export_name,
                         photo_num
                     )
                 elif message.video is not None:
-                    await get_video_data(message, msg_info, chat_export_name)
+                    names = generate_file_name(message, 'video', username)
+                    await get_video_data(message, msg_info, names)
                 elif message.video_note is not None:
                     video_message_num += 1
+                    names = generate_file_name(
+                        message,
+                        'video_note',
+                        username,
+                        video_message_num
+                    )
                     await get_video_note_data(
                         message,
                         msg_info,
-                        chat_export_name,
-                        video_message_num
+                        names
                     )
                 elif message.audio is not None:
-                    await get_audio_data(message, msg_info, chat_export_name)
+                    names = generate_file_name(message, 'audio', username)
+                    await get_audio_data(message, msg_info, names)
                 elif message.voice is not None:
                     voice_num += 1
+                    names = generate_file_name(
+                        message,
+                        'audio',
+                        username,
+                        voice_num
+                    )
                     await get_voice_data(
                         message,
                         msg_info,
-                        chat_export_name,
-                        voice_num
+                        names
                     )
                 elif message.document is not None:
+                    names = generate_file_name(message, 'document', username)
                     await get_document_data(
                         message,
                         msg_info,
-                        chat_export_name
+                        names
                     )
 
                 if message.text is not None:
@@ -217,35 +236,33 @@ async def main():
 async def get_sticker_data(
     message: Message,
     msg_info: dict,
-    chat_export_name: str
+    names: tuple
 ) -> None:
     if MEDIA_EXPORT['stickers'] is True:
-        media_dir = f'{chat_export_name}/stickers'
-        os.makedirs(media_dir, exist_ok=True)
-        sticker_name = f'{media_dir}/{message.sticker.file_name}'
+        sticker_path, thumb_path, sticker_relative_path, thumb_relative_path = names
         try:
             await app.download_media(
                 message.sticker.file_id,
-                sticker_name
+                sticker_path
             )
-            msg_info['file'] = f'stickers/{message.sticker.file_name}'
+            msg_info['file'] = sticker_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['file'] = "(File not included. Change data exporting settings to download.)"
 
-        thumbnail_name = f'{media_dir}/{message.sticker.file_name}_thumb.jpg'
-        # TODO: if have thumb?
-        try:
-            # TODO: None returned??
-            await app.download_media(
-                message.sticker.thumbs[0].file_id,
-                thumbnail_name
-            )
-            msg_info['thumbnail'] = f'stickers/{message.sticker.file_name}_thumb.jpg'
-        except ValueError:
-            print("Oops can't download media!")
+        if message.video.thumbs is not None:
+            try:
+                # TODO: None returned??
+                await app.download_media(
+                    message.sticker.thumbs[0].file_id,
+                    thumb_path
+                )
+                msg_info['thumbnail'] = thumb_relative_path
+            except ValueError:
+                print("Oops can't download media!")
+                msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+        else:
             msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
-
     else:
         msg_info['file'] = "(File not included. Change data exporting settings to download.)"
         msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
@@ -258,32 +275,31 @@ async def get_sticker_data(
 async def get_animation_data(
     message: Message,
     msg_info: dict,
-    chat_export_name: str
+    names: tuple
 ) -> None:
     if MEDIA_EXPORT['animations'] is True:
-        media_dir = f'{chat_export_name}/video_files'
-        os.makedirs(media_dir, exist_ok=True)
-        # TODO: if not have name
-        animation_name = f'{media_dir}/{message.animation.file_name}'
+        animation_path, thumb_path, animation_relative_path, thumb_relative_path = names
         try:
             await app.download_media(
                 message.sticker.file_id,
-                animation_name
+                animation_path
             )
-            msg_info['file'] = f'video_files/{message.animation.file_name}'
+            msg_info['file'] = animation_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['file'] = "(File not included. Change data exporting settings to download.)"
 
-        thumbnail_name = f'{media_dir}/{message.animation.file_name}_thumb.jpg'
-        try:
-            await app.download_media(
-                message.animation.thumbs[0].file_id,
-                thumbnail_name
-            )
-            msg_info['thumbnail'] = f'video_files/{message.animation.file_name}_thumb.jpg'
-        except ValueError:
-            print("Oops can't download media!")
+        if message.video.thumbs is not None:
+            try:
+                await app.download_media(
+                    message.animation.thumbs[0].file_id,
+                    thumb_path
+                )
+                msg_info['thumbnail'] = thumb_relative_path
+            except ValueError:
+                print("Oops can't download media!")
+                msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+        else:
             msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
 
     else:
@@ -296,23 +312,18 @@ async def get_animation_data(
 
 
 async def get_photo_data(
-        message: Message,
-        msg_info: dict,
-        chat_export_name: str,
-        photo_num: int
+    message: Message,
+    msg_info: dict,
+    names: tuple
 ):
     if MEDIA_EXPORT['photos'] is True:
-        os.makedirs(f'{chat_export_name}/photos', exist_ok=True)
-        date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-        # TODO: what format for png??
-        photo_name = f'{chat_export_name}/photos/file_{photo_num}@{date}.jpg'
+        photo_path, photo_relative_path = names
         try:
-            # TODO: None returned??
             await app.download_media(
                 message.photo.file_id,
-                photo_name
+                photo_path
             )
-            msg_info['photo'] = f'photos/file_{photo_num}@{date}.jpg'
+            msg_info['photo'] = photo_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['photo'] = "(File not included. Change data exporting settings to download.)"
@@ -325,34 +336,31 @@ async def get_photo_data(
 async def get_video_data(
     message: Message,
     msg_info: dict,
-    chat_export_name: str
+    names: tuple
 ) -> None:
     if MEDIA_EXPORT['videos'] is True:
-        media_dir = f'{chat_export_name}/video_files'
-        os.makedirs(
-            media_dir,
-            exist_ok=True
-        )
-        video_name = f'{media_dir}/{message.video.file_name}'
+        video_path, thumb_path, video_relative_path, thumb_relative_path = names
         try:
             await app.download_media(
                 message.video.file_id,
-                video_name
+                video_path
             )
-            msg_info['file'] = f'video_files/{message.video.file_name}'
+            msg_info['file'] = video_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['file'] = "(File not included. Change data exporting settings to download.)"
 
-        thumbnail_name = f'{media_dir}/{message.video.file_name}_thumb.jpg'
-        try:
-            await app.download_media(
-                message.video.thumbs[0].file_id,
-                thumbnail_name
-            )
-            msg_info['thumbnail'] = f'video_files/{message.video.file_name}_thumb.jpg'
-        except ValueError:
-            print("Oops can't download media!")
+        if message.video.thumbs is not None:
+            try:
+                await app.download_media(
+                    message.video.thumbs[0].file_id,
+                    thumb_path
+                )
+                msg_info['thumbnail'] = thumb_relative_path
+            except ValueError:
+                print("Oops can't download media!")
+                msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+        else:
             msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
     else:
         msg_info['file'] = "(File not included. Change data exporting settings to download.)"
@@ -367,38 +375,31 @@ async def get_video_data(
 async def get_video_note_data(
     message: Message,
     msg_info: dict,
-    chat_export_name: str,
-    video_message_num: int
+    names: tuple
 ):
     if MEDIA_EXPORT['video_messages'] is True:
-        media_dir = f'{chat_export_name}/round_video_messages'
-        os.makedirs(
-            media_dir,
-            exist_ok=True
-        )
-        date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-        video_message_name = f'{media_dir}/file_{video_message_num}@{date}.mp4'
-        # TODO: if not downloaded??
+        vnote_path, thumb_path, vnote_relative_path, thumb_relative_path = names
         try:
             await app.download_media(
                 message.video_note.file_id,
-                video_message_name
+                vnote_path
             )
-            msg_info['file'] = f'round_video_messages/file_{video_message_num}@{date}.mp4'
+            msg_info['file'] = vnote_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['file'] = "(File not included. Change data exporting settings to download.)"
 
-        thumbnail_name = f'{media_dir}/file_{video_message_num}@{date}.mp4_thumb.jpg'
-        # TODO: if have thumb?
-        try:
-            await app.download_media(
-                message.video_note.thumbs[0].file_id,
-                thumbnail_name
-            )
-            msg_info['thumbnail'] = f'round_video_messages/file_{video_message_num}@{date}.mp4_thumb.jpg'
-        except ValueError:
-            print("Oops can't download media!")
+        if message.video_note.thumbs is not None:
+            try:
+                await app.download_media(
+                    message.video_note.thumbs[0].file_id,
+                    thumb_path
+                )
+                msg_info['thumbnail'] = thumb_relative_path
+            except ValueError:
+                print("Oops can't download media!")
+                msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+        else:
             msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
     else:
         msg_info['file'] = "(File not included. Change data exporting settings to download.)"
@@ -411,26 +412,35 @@ async def get_video_note_data(
 async def get_audio_data(
     message: Message,
     msg_info: dict,
-    chat_export_name: str
+    names: tuple
 ) -> None:
     if MEDIA_EXPORT['audios'] is True:
-        media_dir = f'{chat_export_name}/files'
-        os.makedirs(
-            media_dir,
-            exist_ok=True
-        )
-        audio_name = f'{media_dir}/{message.audio.file_name}'
+        audio_path, thumb_path, audio_relative_path, thumb_relative_path = names
         try:
             await app.download_media(
                 message.audio.file_id,
-                audio_name
+                audio_path
             )
-            msg_info['file'] = f'files/{message.audio.file_name}'
+            msg_info['file'] = audio_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+
+        if message.audio.thumbs is not None:
+            try:
+                await app.download_media(
+                    message.document.thumbs[0].file_id,
+                    thumb_path
+                )
+                msg_info['thumbnail'] = thumb_relative_path
+            except ValueError:
+                print("Oops can't download media!")
+                msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+        else:
+            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
     else:
         msg_info['file'] = "(File not included. Change data exporting settings to download.)"
+        msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
     msg_info['media_type'] = 'audio_file'
     msg_info['performer'] = message.audio.performer
     msg_info['title'] = message.audio.title
@@ -441,23 +451,16 @@ async def get_audio_data(
 async def get_voice_data(
         message: Message,
         msg_info: dict,
-        chat_export_name: str,
-        voice_num: int
-):
+        names: tuple
+) -> None:
     if MEDIA_EXPORT['voice_messages'] is True:
-        media_dir = f'{chat_export_name}/voice_messages'
-        os.makedirs(
-            media_dir,
-            exist_ok=True
-        )
-        date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-        voice_name = f'{media_dir}/audio_{voice_num}@{date}.ogg'
+        voice_path, voice_relative_path = names
         try:
             await app.download_media(
                 message.voice.file_id,
-                voice_name
+                voice_path
             )
-            msg_info['file'] = f'voice_messages/audio_{voice_num}@{date}.ogg'
+            msg_info['file'] = voice_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['file'] = "(File not included. Change data exporting settings to download.)"
@@ -471,33 +474,32 @@ async def get_voice_data(
 async def get_document_data(
     message: Message,
     msg_info: dict,
-    chat_export_name: str
+    names: tuple
 ) -> None:
     if MEDIA_EXPORT['documents'] is True:
-        media_dir = f'{chat_export_name}/files'
-        os.makedirs(media_dir, exist_ok=True)
-        doc_name = f'{media_dir}/{message.document.file_name}'
+        doc_path, thumb_path, doc_relative_path, thumb_relative_path = names
         try:
             await app.download_media(
                 message.document.file_id,
-                doc_name
+                doc_path
             )
-            msg_info['file'] = f'files/{message.document.file_name}'
+            msg_info['file'] = doc_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['file'] = "(File not included. Change data exporting settings to download.)"
 
         if message.document.thumbs is not None:
-            thumbnail_name = f'{media_dir}/{message.document.file_name}_thumb.jpg'
             try:
                 await app.download_media(
                     message.document.thumbs[0].file_id,
-                    thumbnail_name
+                    thumb_path
                 )
-                msg_info['thumbnail'] = f'files/{message.document.file_name}_thumb.jpg'
+                msg_info['thumbnail'] = thumb_relative_path
             except ValueError:
                 print("Oops can't download media!")
                 msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
+        else:
+            msg_info['thumbnail'] = "(File not included. Change data exporting settings to download.)"
     else:
         msg_info['file'] = "(File not included. Change data exporting settings to download.)"
         # TODO: if have thumbnail??
@@ -602,6 +604,223 @@ async def get_contact_data() -> list:
     # TODO: convert to vcf
     return all_contacts
 
+
+def generate_file_name(
+    message: Message,
+    file_type: str,
+    username: str,
+    media_num: int = None,
+) -> tuple:
+
+    chat_export_date = datetime.now().strftime("%Y-%m-%d")
+    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    # TODO: when user want other path
+    path = ''
+
+    if file_type == 'photo':
+        media_dir = f'{chat_export_name}/photos'
+        os.makedirs(media_dir, exist_ok=True)
+        if message.photo.file_name is not None:
+            photo_name = message.photo.file_name
+            photo_path = f'{media_dir}/{photo_name}'
+        else:
+            date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+            # TODO: what format for png??
+            photo_name = f'file_{media_num}@{date}.jpg'
+            photo_path = f'{chat_export_name}/photos/{photo_name}'
+
+        photo_relative_path = f'photos/{photo_name}'
+
+        result = (
+            photo_path,
+            photo_relative_path,
+        )
+        return result
+
+    elif file_type == 'video':
+        media_dir = f'{chat_export_name}/video_files'
+        os.makedirs(media_dir, exist_ok=True)
+        if message.video.file_name is not None:
+            video_name = message.video.file_name
+            video_path = f'{media_dir}/{video_name}'
+        else:
+            # TODO: set name
+            video_name = 'random name'
+            video_path = 'random name'
+
+        if message.video.thumbs is not None:
+            thumb_name = f'{video_name}_thumb.jpg'
+            thumb_path = f'{media_dir}/{thumb_name}'
+        else:
+            thumb_name = None
+            thumb_path = None
+
+        video_relative_path = f'video_files/{video_name}'
+        thumb_relative_path = f'video_files/{thumb_name}'
+
+        result = (
+            video_path,
+            thumb_path,
+            video_relative_path,
+            thumb_relative_path
+        )
+        return result
+
+    elif file_type == 'voice':
+        media_dir = f'{chat_export_name}/voice_messages'
+        os.makedirs(media_dir, exist_ok=True)
+
+        if message.document.file_name is not None:
+            voice_name = message.voice.file_name
+            voice_path = f'{media_dir}/{voice_name}'
+        else:
+            date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+            voice_name = f'audio_{voice_num}@{date}.ogg'
+            voice_path = f'{media_dir}/{voice_name}'
+
+        voice_relative_path = f'voice_messages/{voice_name}'
+
+        result = voice_path, voice_relative_path
+        return result
+
+    elif file_type == 'video_note':
+        media_dir = f'{chat_export_name}/round_video_messages'
+        os.makedirs(media_dir, exist_ok=True)
+        if message.video_note.file_name is not None:
+            vnote_name = message.video_note.file_name
+            vnote_path = f'{media_dir}/{vnote_name}'
+        else:
+            date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+            vnote_name = f'file_{media_num}@{date}.mp4'
+            vnote_path = f'{media_dir}/{vnote_name}'
+
+        if message.video_note.thumbs is not None:
+            thumb_name = f'{vnote_name}_thumb.jpg'
+            thumb_path = f'{media_dir}/{thumb_name}'
+        else:
+            thumb_name = None
+            thumb_path = None
+
+        vnote_relative_path = f'round_video_messages/{vnote_name}'
+        thumb_relative_path = f'round_video_messages/{thumb_name}'
+
+        result = (
+            vnote_path,
+            thumb_path,
+            vnote_relative_path,
+            thumb_relative_path
+        )
+        return result
+
+   elif file_type == 'sticker':
+        media_dir = f'{chat_export_name}/stickers'
+        os.makedirs(media_dir, exist_ok=True)
+
+        if message.document.file_name is not None:
+            sticker_name = message.sticker.file_name
+            sticker_path = f'{media_dir}/{sticker_name}'
+        else:
+            # TODO: set name
+            sticker_name = 'random name'
+            sticker_path = 'random name'
+
+        if message.sticker.thumbs is not None:
+            thumb_name = f'{sticker_name}_thumb.jpg'
+            thumb_path = f'{media_dir}/{thumb_name}'
+        else:
+            thumb_name = None
+            thumb_path = None
+
+        sticker_relative_path = f'stickers/{audio_name}'
+        thumb_relative_path = f'stickers/{thumb_name}'
+
+        result = (
+            sticker_path,
+            thumb_path,
+            sticker_relative_path,
+            thumb_relative_path
+        )
+        return result
+
+    elif file_type == 'animation':
+        media_dir = f'{chat_export_name}/video_files'
+        os.makedirs(media_dir, exist_ok=True)
+        if message.animation.file_name is not None:
+            animation_name = message.animation.file_name
+            animation_path = f'{media_dir}/{animation_name}'
+        else:
+            # TODO: set name
+            animation_name = 'random name'
+            animation_path = 'random name'
+
+        if message.animation.thumbs is not None:
+            thumb_name = f'{animation_name}_thumb.jpg'
+            thumb_path = f'{media_dir}/{thumb_name}'
+        else:
+            thumb_name = None
+            thumb_path = None
+
+        animation_relative_path = f'video_files/{animation_name}'
+        thumb_relative_path = f'video_files/{thumb_name}'
+
+        result = (
+            animation_path,
+            thumb_path,
+            animation_relative_path,
+            thumb_relative_path
+        )
+        return result
+
+    elif file_type == 'audio':
+        media_dir = f'{chat_export_name}/files'
+        os.makedirs(media_dir, exist_ok=True)
+
+        if message.audio.file_name is not None:
+            audio_name = message.audio.file_name
+            audio_path = f'{media_dir}/{audio_name}'
+        else:
+            # TODO: set name
+            audio_name = 'random name'
+            audio_path = 'random name'
+
+        if message.audio.thumbs is not None:
+            thumb_name = f'{audio_name}_thumb.jpg'
+            thumb_path = f'{media_dir}/{thumb_name}'
+        else:
+            thumb_name = None
+            thumb_path = None
+
+        audio_relative_path = f'files/{audio_name}'
+        thumb_relative_path = f'files/{thumb_name}'
+
+        result = audio_path, thumb_path, audio_relative_path, thumb_relative_path
+        return result
+
+    else:
+        # document
+        media_dir = f'{chat_export_name}/files'
+        os.makedirs(media_dir, exist_ok=True)
+        if message.document.file_name is not None:
+            doc_name = message.document.file_name
+            doc_path = f'{media_dir}/{doc_name}'
+        else:
+            # TODO: set name
+            doc_name = 'random name'
+            doc_path = 'random name'
+            pass
+
+        if message.document.thumbs is not None:
+            thumb_name = f'{doc_name}_thumb.jpg'
+            thumb_path = f'{media_dir}/{thumb_name}'
+        else:
+            thumb_name = None
+
+        doc_relative_path = f'files/{doc_name}'
+        thumb_relative_path = f'files/{thumb_name}'
+
+        result = doc_path, thumb_path, doc_relative_path, thumb_relative_path
+        return result
+    
 
 def convert_to_unixtime(date: datetime):
     # telegram date format: "2022-07-10 08:49:23"
