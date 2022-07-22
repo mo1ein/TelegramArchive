@@ -225,6 +225,11 @@ async def main():
                     msg_info,
                     names
                 )
+            elif message.location is not None:
+                msg_info['location_information'] = {
+                    'latitude': message.location.latitude,
+                    'longitude': message.location.longitude
+                }
 
             if message.text is not None:
                 text = get_text_data(message, 'text')
