@@ -610,9 +610,13 @@ def get_contact_data(
 
     if message.contact.first_name is not None:
         contact_data['fist_name'] = message.contact.first_name
+    else:
+        contact_data['fist_name'] = ''
 
     if message.contact.last_name is not None:
         contact_data['last_name'] = message.contact.last_name
+    else:
+        contact_data['last_name'] = ''
 
     msg_info['contact_information'] = contact_data
     msg_info['contact_vcard'] = vcard_relative_path
