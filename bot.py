@@ -57,8 +57,6 @@ async def main():
         # TODO: CHAT_EXPORT in if statements for export all data in your account.
         # for example all channels, all groups, ...
         if (chat.type == ChatType.PRIVATE
-                and CHAT_EXPORT['personal_chat'] is True):
-        elif (chat.type == ChatType.PRIVATE
                 and CHAT_EXPORT['personal_chats'] is True):
             user_info = await app.get_users(chat_ids)
             username = user_info.username
@@ -198,7 +196,7 @@ async def main():
                 voice_num += 1
                 names = generate_file_name(
                     message,
-                    'audio',
+                    'voice',
                     username,
                     voice_num
                 )
@@ -601,7 +599,7 @@ def get_text_data(message: Message, text_mode: str) -> list:
 
 
 # TODO: fix better typing
-async def get_contact_data(
+def get_contact_data(
     message: Message,
     msg_info: dict,
     names: tuple
