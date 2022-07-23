@@ -22,7 +22,7 @@ async def main():
     async with app:
         # await app.send_message('me', 'ping!')
         for cid in chat_ids:
-        # when use telegram api, channels id have -100 prefix
+            # when use telegram api, channels id have -100 prefix
             if type(cid) == int:
                 new_id = int(f'-100{cid}')
                 chat_ids[chat_ids.index(cid)] = new_id
@@ -153,84 +153,138 @@ async def main():
                 # TODO: type service. actor...
 
                 if message.sticker is not None:
-                    names = generate_file_name(
-                        message,
-                        'sticker',
-                        username
-                    )
-                    await get_sticker_data(message, msg_info, names)
+                    if MEDIA_EXPORT['stickers'] is True:
+                        names = generate_file_name(
+                            message,
+                            'sticker',
+                            username
+                        )
+                        await get_sticker_data(message, msg_info, names)
+                    else:
+                        msg_info['file'] = FILE_NOT_FOUND
+                        msg_info['thumbnail'] = FILE_NOT_FOUND
+                        msg_info['media_type'] = 'sticker'
+                        msg_info['sticker_emoji'] = message.sticker.emoji
+                        msg_info['width'] = message.sticker.width
+                        msg_info['height'] = message.sticker.height
                 elif message.animation is not None:
-                    names = generate_file_name(message, 'animation', username)
-                    await get_animation_data(
-                        message,
-                        msg_info,
-                        names
-                    )
+                    if MEDIA_EXPORT['animations'] is True:
+                        names = generate_file_name(message, 'animation', username)
+                        await get_animation_data(
+                            message,
+                            msg_info,
+                            names
+                        )
+                    else:
+                        msg_info['file'] = FILE_NOT_FOUND
+                        msg_info['thumbnail'] = FILE_NOT_FOUND
+                        msg_info['media_type'] = 'animation'
+                        msg_info['mime_type'] = message.animation.mime_type
+                        msg_info['width'] = message.animation.width
                 elif message.photo is not None:
-                    photo_num += 1
-                    names = generate_file_name(
-                        message,
-                        'photo',
-                        username,
-                        photo_num
-                    )
-                    await get_photo_data(
-                        message,
-                        msg_info,
-                        names
-                    )
+                    if MEDIA_EXPORT['photos'] is True:
+                        photo_num += 1
+                        names = generate_file_name(
+                            message,
+                            'photo',
+                            username,
+                            photo_num
+                        )
+                        await get_photo_data(
+                            message,
+                            msg_info,
+                            names
+                        )
+                    else:
+                        msg_info['photo'] = FILE_NOT_FOUND
+                        msg_info['width'] = message.photo.width
+                        msg_info['height'] = message.photo.height
                 elif message.video is not None:
-                    names = generate_file_name(message, 'video', username)
-                    await get_video_data(message, msg_info, names)
+                    if MEDIA_EXPORT['videos'] is True:
+                        names = generate_file_name(message, 'video', username)
+                        await get_video_data(message, msg_info, names)
+                    else:
+                        msg_info['file'] = FILE_NOT_FOUND
+                        msg_info['thumbnail'] = FILE_NOT_FOUND
+                        msg_info['media_type'] = 'video_file'
+                        msg_info['mime_type'] = message.video.mime_type
+                        msg_info['duration_seconds'] = message.video.duration
+                        msg_info['width'] = message.video.width
                 elif message.video_note is not None:
-                    video_message_num += 1
-                    names = generate_file_name(
-                        message,
-                        'video_note',
-                        username,
-                        video_message_num
-                    )
-                    await get_video_note_data(
-                        message,
-                        msg_info,
-                        names
-                    )
+                    if MEDIA_EXPORT['video_messages'] is True:
+                        video_message_num += 1
+                        names = generate_file_name(
+                            message,
+                            'video_note',
+                            username,
+                            video_message_num
+                        )
+                        await get_video_note_data(
+                            message,
+                            msg_info,
+                            names
+                        )
+                    else:
+                        msg_info['file'] = FILE_NOT_FOUND
+                        msg_info['thumbnail'] = FILE_NOT_FOUND
+                        msg_info['media_type'] = 'video_message'
+                        msg_info['mime_type'] = message.video_note.mime_type
+                        msg_info['duration_seconds'] = message.video_note.duration
                 elif message.audio is not None:
-                    names = generate_file_name(message, 'audio', username)
-                    await get_audio_data(message, msg_info, names)
+                    if MEDIA_EXPORT['audios'] is True:
+                        names = generate_file_name(message, 'audio', username)
+                        await get_audio_data(message, msg_info, names)
+                    else:
+                        msg_info['file'] = FILE_NOT_FOUND
+                        msg_info['thumbnail'] = FILE_NOT_FOUND
+                        msg_info['media_type'] = 'audio_file'
+                        msg_info['performer'] = message.audio.performer
+                        msg_info['title'] = message.audio.title
+                        msg_info['mime_type'] = message.audio.mime_type
                 elif message.voice is not None:
-                    voice_num += 1
-                    names = generate_file_name(
-                        message,
-                        'voice',
-                        username,
-                        voice_num
-                    )
-                    await get_voice_data(
-                        message,
-                        msg_info,
-                        names
-                    )
+                    if MEDIA_EXPORT['voice_messages'] is True:
+                        voice_num += 1
+                        names = generate_file_name(
+                            message,
+                            'voice',
+                            username,
+                            voice_num
+                        )
+                        await get_voice_data(
+                            message,
+                            msg_info,
+                            names
+                        )
+                    else:
+                        msg_info['file'] = FILE_NOT_FOUND
                 elif message.document is not None:
-                    names = generate_file_name(message, 'document', username)
-                    await get_document_data(
-                        message,
-                        msg_info,
-                        names
-                    )
+                    if MEDIA_EXPORT['documents'] is True:
+                        names = generate_file_name(message, 'document', username)
+                        await get_document_data(
+                            message,
+                            msg_info,
+                            names
+                        )
+                    else:
+                        msg_info['file'] = FILE_NOT_FOUND
+                        msg_info['thumbnail'] = FILE_NOT_FOUND
                 elif message.contact is not None:
-                    contact_num += 1
-                    names = generate_file_name(
-                        message,
-                        'contact',
-                        username,
-                        contact_num
-                    )
-                    get_contact_data(
-                        message,
-                        msg_info,
-                        names
-                    )
+                    if MEDIA_EXPORT['contacts'] is True:
+                        contact_num += 1
+                        names = generate_file_name(
+                            message,
+                            'contact',
+                            username,
+                            contact_num
+                        )
+                        get_contact_data(
+                            message,
+                            msg_info,
+                            names
+                        )
+                    else:
+                        # TODO: 
+                        pass
                 elif message.location is not None:
                     msg_info['location_information'] = {
                         'latitude': message.location.latitude,
@@ -276,33 +330,30 @@ async def get_sticker_data(
     msg_info: dict,
     names: tuple
 ) -> None:
-    if MEDIA_EXPORT['stickers'] is True:
-        sticker_path, thumb_path, sticker_relative_path, thumb_relative_path = names
+    sticker_path, thumb_path, sticker_relative_path, thumb_relative_path = names
+    try:
+        await app.download_media(
+            message.sticker.file_id,
+            sticker_path
+        )
+        msg_info['file'] = sticker_relative_path
+    except ValueError:
+        print("Oops can't download media!")
+        msg_info['file'] = FILE_NOT_FOUND
+
+    if message.sticker.thumbs is not None:
         try:
             await app.download_media(
-                message.sticker.file_id,
-                sticker_path
+                message.sticker.thumbs[0].file_id,
+                thumb_path
             )
-            msg_info['file'] = sticker_relative_path
+            msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = FILE_NOT_FOUND
-
-        if message.sticker.thumbs is not None:
-            try:
-                await app.download_media(
-                    message.sticker.thumbs[0].file_id,
-                    thumb_path
-                )
-                msg_info['thumbnail'] = thumb_relative_path
-            except ValueError:
-                print("Oops can't download media!")
-                msg_info['thumbnail'] = FILE_NOT_FOUND
-        else:
             msg_info['thumbnail'] = FILE_NOT_FOUND
     else:
-        msg_info['file'] = FILE_NOT_FOUND
         msg_info['thumbnail'] = FILE_NOT_FOUND
+
     msg_info['media_type'] = 'sticker'
     msg_info['sticker_emoji'] = message.sticker.emoji
     msg_info['width'] = message.sticker.width
@@ -314,34 +365,30 @@ async def get_animation_data(
     msg_info: dict,
     names: tuple
 ) -> None:
-    if MEDIA_EXPORT['animations'] is True:
-        animation_path, thumb_path, animation_relative_path, thumb_relative_path = names
+    animation_path, thumb_path, animation_relative_path, thumb_relative_path = names
+    try:
+        await app.download_media(
+            message.animation.file_id,
+            animation_path
+        )
+        msg_info['file'] = animation_relative_path
+    except ValueError:
+        print("Oops can't download media!")
+        msg_info['file'] = FILE_NOT_FOUND
+
+    if message.animation.thumbs is not None:
         try:
             await app.download_media(
-                message.animation.file_id,
-                animation_path
+                message.animation.thumbs[0].file_id,
+                thumb_path
             )
-            msg_info['file'] = animation_relative_path
+            msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = FILE_NOT_FOUND
-
-        if message.animation.thumbs is not None:
-            try:
-                await app.download_media(
-                    message.animation.thumbs[0].file_id,
-                    thumb_path
-                )
-                msg_info['thumbnail'] = thumb_relative_path
-            except ValueError:
-                print("Oops can't download media!")
-                msg_info['thumbnail'] = FILE_NOT_FOUND
-        else:
             msg_info['thumbnail'] = FILE_NOT_FOUND
-
     else:
-        msg_info['file'] = FILE_NOT_FOUND
         msg_info['thumbnail'] = FILE_NOT_FOUND
+
     msg_info['media_type'] = 'animation'
     msg_info['mime_type'] = message.animation.mime_type
     msg_info['width'] = message.animation.width
@@ -353,19 +400,17 @@ async def get_photo_data(
     msg_info: dict,
     names: tuple
 ):
-    if MEDIA_EXPORT['photos'] is True:
-        photo_path, photo_relative_path = names
-        try:
-            await app.download_media(
-                message.photo.file_id,
-                photo_path
-            )
-            msg_info['photo'] = photo_relative_path
-        except ValueError:
-            print("Oops can't download media!")
-            msg_info['photo'] = FILE_NOT_FOUND
-    else:
+    photo_path, photo_relative_path = names
+    try:
+        await app.download_media(
+            message.photo.file_id,
+            photo_path
+        )
+        msg_info['photo'] = photo_relative_path
+    except ValueError:
+        print("Oops can't download media!")
         msg_info['photo'] = FILE_NOT_FOUND
+
     msg_info['width'] = message.photo.width
     msg_info['height'] = message.photo.height
 
@@ -375,33 +420,30 @@ async def get_video_data(
     msg_info: dict,
     names: tuple
 ) -> None:
-    if MEDIA_EXPORT['videos'] is True:
-        video_path, thumb_path, video_relative_path, thumb_relative_path = names
+    video_path, thumb_path, video_relative_path, thumb_relative_path = names
+    try:
+        await app.download_media(
+            message.video.file_id,
+            video_path
+        )
+        msg_info['file'] = video_relative_path
+    except ValueError:
+        print("Oops can't download media!")
+        msg_info['file'] = FILE_NOT_FOUND
+
+    if message.video.thumbs is not None:
         try:
             await app.download_media(
-                message.video.file_id,
-                video_path
+                message.video.thumbs[0].file_id,
+                thumb_path
             )
-            msg_info['file'] = video_relative_path
+            msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = FILE_NOT_FOUND
-
-        if message.video.thumbs is not None:
-            try:
-                await app.download_media(
-                    message.video.thumbs[0].file_id,
-                    thumb_path
-                )
-                msg_info['thumbnail'] = thumb_relative_path
-            except ValueError:
-                print("Oops can't download media!")
-                msg_info['thumbnail'] = FILE_NOT_FOUND
-        else:
             msg_info['thumbnail'] = FILE_NOT_FOUND
     else:
-        msg_info['file'] = FILE_NOT_FOUND
         msg_info['thumbnail'] = FILE_NOT_FOUND
+
     msg_info['media_type'] = 'video_file'
     msg_info['mime_type'] = message.video.mime_type
     msg_info['duration_seconds'] = message.video.duration
@@ -414,33 +456,30 @@ async def get_video_note_data(
     msg_info: dict,
     names: tuple
 ):
-    if MEDIA_EXPORT['video_messages'] is True:
-        vnote_path, thumb_path, vnote_relative_path, thumb_relative_path = names
+    vnote_path, thumb_path, vnote_relative_path, thumb_relative_path = names
+    try:
+        await app.download_media(
+            message.video_note.file_id,
+            vnote_path
+        )
+        msg_info['file'] = vnote_relative_path
+    except ValueError:
+        print("Oops can't download media!")
+        msg_info['file'] = FILE_NOT_FOUND
+
+    if message.video_note.thumbs is not None:
         try:
             await app.download_media(
-                message.video_note.file_id,
-                vnote_path
+                message.video_note.thumbs[0].file_id,
+                thumb_path
             )
-            msg_info['file'] = vnote_relative_path
+            msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = FILE_NOT_FOUND
-
-        if message.video_note.thumbs is not None:
-            try:
-                await app.download_media(
-                    message.video_note.thumbs[0].file_id,
-                    thumb_path
-                )
-                msg_info['thumbnail'] = thumb_relative_path
-            except ValueError:
-                print("Oops can't download media!")
-                msg_info['thumbnail'] = FILE_NOT_FOUND
-        else:
             msg_info['thumbnail'] = FILE_NOT_FOUND
     else:
-        msg_info['file'] = FILE_NOT_FOUND
         msg_info['thumbnail'] = FILE_NOT_FOUND
+
     msg_info['media_type'] = 'video_message'
     msg_info['mime_type'] = message.video_note.mime_type
     msg_info['duration_seconds'] = message.video_note.duration
@@ -451,33 +490,30 @@ async def get_audio_data(
     msg_info: dict,
     names: tuple
 ) -> None:
-    if MEDIA_EXPORT['audios'] is True:
-        audio_path, thumb_path, audio_relative_path, thumb_relative_path = names
+    audio_path, thumb_path, audio_relative_path, thumb_relative_path = names
+    try:
+        await app.download_media(
+            message.audio.file_id,
+            audio_path
+        )
+        msg_info['file'] = audio_relative_path
+    except ValueError:
+        print("Oops can't download media!")
+        msg_info['file'] = FILE_NOT_FOUND
+
+    if message.audio.thumbs is not None:
         try:
             await app.download_media(
-                message.audio.file_id,
-                audio_path
+                message.audio.thumbs[0].file_id,
+                thumb_path
             )
-            msg_info['file'] = audio_relative_path
+            msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = FILE_NOT_FOUND
-
-        if message.audio.thumbs is not None:
-            try:
-                await app.download_media(
-                    message.audio.thumbs[0].file_id,
-                    thumb_path
-                )
-                msg_info['thumbnail'] = thumb_relative_path
-            except ValueError:
-                print("Oops can't download media!")
-                msg_info['thumbnail'] = FILE_NOT_FOUND
-        else:
             msg_info['thumbnail'] = FILE_NOT_FOUND
     else:
-        msg_info['file'] = FILE_NOT_FOUND
         msg_info['thumbnail'] = FILE_NOT_FOUND
+
     msg_info['media_type'] = 'audio_file'
     msg_info['performer'] = message.audio.performer
     msg_info['title'] = message.audio.title
@@ -490,19 +526,17 @@ async def get_voice_data(
         msg_info: dict,
         names: tuple
 ) -> None:
-    if MEDIA_EXPORT['voice_messages'] is True:
-        voice_path, voice_relative_path = names
-        try:
-            await app.download_media(
-                message.voice.file_id,
-                voice_path
-            )
-            msg_info['file'] = voice_relative_path
-        except ValueError:
-            print("Oops can't download media!")
-            msg_info['file'] = FILE_NOT_FOUND
-    else:
+    voice_path, voice_relative_path = names
+    try:
+        await app.download_media(
+            message.voice.file_id,
+            voice_path
+        )
+        msg_info['file'] = voice_relative_path
+    except ValueError:
+        print("Oops can't download media!")
         msg_info['file'] = FILE_NOT_FOUND
+
     msg_info['media_type'] = 'voice_message'
     msg_info['mime_type'] = message.voice.mime_type
     msg_info['duration_seconds'] = message.voice.duration
@@ -513,33 +547,30 @@ async def get_document_data(
     msg_info: dict,
     names: tuple
 ) -> None:
-    if MEDIA_EXPORT['documents'] is True:
-        doc_path, thumb_path, doc_relative_path, thumb_relative_path = names
+    doc_path, thumb_path, doc_relative_path, thumb_relative_path = names
+    try:
+        await app.download_media(
+            message.document.file_id,
+            doc_path
+        )
+        msg_info['file'] = doc_relative_path
+    except ValueError:
+        print("Oops can't download media!")
+        msg_info['file'] = FILE_NOT_FOUND
+
+    if message.document.thumbs is not None:
         try:
             await app.download_media(
-                message.document.file_id,
-                doc_path
+                message.document.thumbs[0].file_id,
+                thumb_path
             )
-            msg_info['file'] = doc_relative_path
+            msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
-            msg_info['file'] = FILE_NOT_FOUND
-
-        if message.document.thumbs is not None:
-            try:
-                await app.download_media(
-                    message.document.thumbs[0].file_id,
-                    thumb_path
-                )
-                msg_info['thumbnail'] = thumb_relative_path
-            except ValueError:
-                print("Oops can't download media!")
-                msg_info['thumbnail'] = FILE_NOT_FOUND
-        else:
             msg_info['thumbnail'] = FILE_NOT_FOUND
     else:
-        msg_info['file'] = FILE_NOT_FOUND
         msg_info['thumbnail'] = FILE_NOT_FOUND
+
     msg_info['mime_type'] = message.document.mime_type
 
 
