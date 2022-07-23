@@ -21,14 +21,15 @@ chat_ids = 'mo_ein'
 
 
 async def main():
-    # with should delete??
     async with app:
-        await app.send_message('me', 'ping!')
-
+        # await app.send_message('me', 'ping!')
+        global chat_ids
         # when use telegram api, channels id have -100 prefix
-        if chat_ids.isnumeric():
-            global chat_ids
+        if type(chat_ids) == int:
             chat_ids = int(f'-100{chat_ids}')
+        else:
+            if chat_ids.isnumeric():
+                chat_ids = int(f'-100{chat_ids}')
 
         chat = await app.get_chat(chat_ids)
         # print(chat)
