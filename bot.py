@@ -25,6 +25,11 @@ async def main():
     async with app:
         await app.send_message('me', 'ping!')
 
+        # when use telegram api, channels id have -100 prefix
+        if chat_ids.isnumeric():
+            global chat_ids
+            chat_ids = int(f'-100{chat_ids}')
+
         chat = await app.get_chat(chat_ids)
         # print(chat)
 
