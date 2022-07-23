@@ -42,24 +42,8 @@ async def main():
             messages = []
             chat_data = {}
             # read_messages = True
-
-            '''
-            TODO
-            just export all contacts
-            if CHAT_EXPORT['contacts'] is True:
-                read_messages = False
-                # list
-                contacts = await get_contact_data()
-                # TODO:
-                chat_data['about'] = ''
-                tmp = {}
-                # TODO:
-                tmp['about'] = ''
-                tmp['list'] = contacts
-                chat_data['contacts'] = tmp
-                # TODO:
-                chat_data['frequent_contacts'] = {}
-            '''
+            # TODO
+            # just export all contacts
             # TODO: CHAT_EXPORT in if statements for export all data in your account.
             # for example all channels, all groups, ...
             if (chat.type == ChatType.PRIVATE
@@ -154,9 +138,8 @@ async def main():
 
                 if message.sticker is not None:
                     if MEDIA_EXPORT['stickers'] is True:
-                        names = generate_file_name(
+                        names = get_sticker_name(
                             message,
-                            'sticker',
                             username
                         )
                         await get_sticker_data(message, msg_info, names)
@@ -169,7 +152,7 @@ async def main():
                         msg_info['height'] = message.sticker.height
                 elif message.animation is not None:
                     if MEDIA_EXPORT['animations'] is True:
-                        names = generate_file_name(message, 'animation', username)
+                        names = get_animation_name(message, username)
                         await get_animation_data(
                             message,
                             msg_info,
@@ -184,9 +167,8 @@ async def main():
                 elif message.photo is not None:
                     if MEDIA_EXPORT['photos'] is True:
                         photo_num += 1
-                        names = generate_file_name(
+                        names = get_photo_name(
                             message,
-                            'photo',
                             username,
                             photo_num
                         )
@@ -201,7 +183,7 @@ async def main():
                         msg_info['height'] = message.photo.height
                 elif message.video is not None:
                     if MEDIA_EXPORT['videos'] is True:
-                        names = generate_file_name(message, 'video', username)
+                        names = get_video_name(message, username)
                         await get_video_data(message, msg_info, names)
                     else:
                         msg_info['file'] = FILE_NOT_FOUND
@@ -213,9 +195,8 @@ async def main():
                 elif message.video_note is not None:
                     if MEDIA_EXPORT['video_messages'] is True:
                         video_message_num += 1
-                        names = generate_file_name(
+                        names = get_video_name(
                             message,
-                            'video_note',
                             username,
                             video_message_num
                         )
@@ -232,7 +213,7 @@ async def main():
                         msg_info['duration_seconds'] = message.video_note.duration
                 elif message.audio is not None:
                     if MEDIA_EXPORT['audios'] is True:
-                        names = generate_file_name(message, 'audio', username)
+                        names = get_audio_name(message, username)
                         await get_audio_data(message, msg_info, names)
                     else:
                         msg_info['file'] = FILE_NOT_FOUND
@@ -244,9 +225,8 @@ async def main():
                 elif message.voice is not None:
                     if MEDIA_EXPORT['voice_messages'] is True:
                         voice_num += 1
-                        names = generate_file_name(
+                        names = get_audio_name(
                             message,
-                            'voice',
                             username,
                             voice_num
                         )
@@ -259,7 +239,7 @@ async def main():
                         msg_info['file'] = FILE_NOT_FOUND
                 elif message.document is not None:
                     if MEDIA_EXPORT['documents'] is True:
-                        names = generate_file_name(message, 'document', username)
+                        names = get_document_name(message, username)
                         await get_document_data(
                             message,
                             msg_info,
@@ -271,9 +251,7 @@ async def main():
                 elif message.contact is not None:
                     if MEDIA_EXPORT['contacts'] is True:
                         contact_num += 1
-                        names = generate_file_name(
-                            message,
-                            'contact',
+                        names = get_contact_name(
                             username,
                             contact_num
                         )
@@ -283,7 +261,7 @@ async def main():
                             names
                         )
                     else:
-                        # TODO: 
+                        # TODO:
                         pass
                 elif message.location is not None:
                     msg_info['location_information'] = {
@@ -310,7 +288,6 @@ async def main():
 
                 messages.append(msg_info)
                 chat_data['messages'] = messages
-
 
             json_name = generate_json_name(username=username)
             with open(json_name, mode='w') as f:
@@ -675,246 +652,290 @@ def get_contact_data(
         for i in vcard:
             f.write(f'{i}\n')
 
-    '''
-    TODO: for all contacts
-    contacts = await app.get_contacts()
-    all_contacts = []
-    for c in contacts:
-        user = {}
-        # TODO: add date and date_unixtime
-        if c.first_name is not None:
-            user['first_name'] = c.first_name
-        else:
-            user['first_name'] = ''
-
-        if c.last_name is not None:
-            user['last_name'] = c.last_name
-        else:
-            user['last_name'] = ''
-
-        if c.phone_number is not None:
-            user['phone_number'] = c.phone_number
-        else:
-            user['phone_number'] = ''
-
-        all_contacts.append(user)
+    # TODO: for all contacts
     # TODO: convert to vcf
-    return all_contacts
-    '''
 
 
-def generate_file_name(
+def get_photo_name(
     message: Message,
-    file_type: str,
     username: str,
-    media_num: int = None,
+    media_num: int = None
 ) -> tuple:
+    chat_export_date = datetime.now().strftime("%Y-%m-%d")
+    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    # TODO: when user want other path
+    path = ''
+    media_dir = f'{chat_export_name}/photos'
+    os.makedirs(media_dir, exist_ok=True)
 
+    date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+    # TODO: what format for png??
+    photo_name = f'file_{media_num}@{date}.jpg'
+    photo_path = f'{chat_export_name}/photos/{photo_name}'
+    photo_relative_path = f'photos/{photo_name}'
+
+    result = photo_path, photo_relative_path
+    return result
+
+
+def get_video_name(
+    message: Message,
+    username: str,
+    media_num: int = None
+) -> tuple:
+    chat_export_date = datetime.now().strftime("%Y-%m-%d")
+    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    # TODO: when user want other path
+    path = ''
+    media_dir = f'{chat_export_name}/video_files'
+    os.makedirs(media_dir, exist_ok=True)
+    if message.video.file_name is not None:
+        video_name = message.video.file_name
+        video_path = f'{media_dir}/{video_name}'
+    else:
+        # TODO: set name
+        video_name = 'random name'
+        video_path = 'random name'
+
+    if message.video.thumbs is not None:
+        thumb_name = f'{video_name}_thumb.jpg'
+        thumb_path = f'{media_dir}/{thumb_name}'
+    else:
+        thumb_name = None
+        thumb_path = None
+
+    video_relative_path = f'video_files/{video_name}'
+    thumb_relative_path = f'video_files/{thumb_name}'
+
+    result = (
+        video_path,
+        thumb_path,
+        video_relative_path,
+        thumb_relative_path
+    )
+    return result
+
+
+def get_voice_name(
+    message: Message,
+    username: str,
+    media_num: int = None
+) -> tuple:
     chat_export_date = datetime.now().strftime("%Y-%m-%d")
     chat_export_name = f'ChatExport_{username}_{chat_export_date}'
     # TODO: when user want other path
     path = ''
 
-    if file_type == 'photo':
-        media_dir = f'{chat_export_name}/photos'
-        os.makedirs(media_dir, exist_ok=True)
+    media_dir = f'{chat_export_name}/voice_messages'
+    os.makedirs(media_dir, exist_ok=True)
 
-        date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-        # TODO: what format for png??
-        photo_name = f'file_{media_num}@{date}.jpg'
-        photo_path = f'{chat_export_name}/photos/{photo_name}'
-        photo_relative_path = f'photos/{photo_name}'
+    date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+    voice_name = f'audio_{media_num}@{date}.ogg'
+    voice_path = f'{media_dir}/{voice_name}'
+    voice_relative_path = f'voice_messages/{voice_name}'
 
-        result = (
-            photo_path,
-            photo_relative_path,
-        )
-        return result
+    result = voice_path, voice_relative_path
+    return result
 
-    elif file_type == 'video':
-        media_dir = f'{chat_export_name}/video_files'
-        os.makedirs(media_dir, exist_ok=True)
-        if message.video.file_name is not None:
-            video_name = message.video.file_name
-            video_path = f'{media_dir}/{video_name}'
-        else:
-            # TODO: set name
-            video_name = 'random name'
-            video_path = 'random name'
 
-        if message.video.thumbs is not None:
-            thumb_name = f'{video_name}_thumb.jpg'
-            thumb_path = f'{media_dir}/{thumb_name}'
-        else:
-            thumb_name = None
-            thumb_path = None
+def get_video_note_name(
+    message: Message,
+    username: str,
+    media_num: int = None
+) -> tuple:
+    chat_export_date = datetime.now().strftime("%Y-%m-%d")
+    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    # TODO: when user want other path
+    path = ''
+    media_dir = f'{chat_export_name}/round_video_messages'
+    os.makedirs(media_dir, exist_ok=True)
 
-        video_relative_path = f'video_files/{video_name}'
-        thumb_relative_path = f'video_files/{thumb_name}'
+    # TODO: by default don't have name
+    date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
+    vnote_name = f'file_{media_num}@{date}.mp4'
+    vnote_path = f'{media_dir}/{vnote_name}'
 
-        result = (
-            video_path,
-            thumb_path,
-            video_relative_path,
-            thumb_relative_path
-        )
-        return result
-
-    elif file_type == 'voice':
-        media_dir = f'{chat_export_name}/voice_messages'
-        os.makedirs(media_dir, exist_ok=True)
-
-        date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-        voice_name = f'audio_{media_num}@{date}.ogg'
-        voice_path = f'{media_dir}/{voice_name}'
-        voice_relative_path = f'voice_messages/{voice_name}'
-
-        result = voice_path, voice_relative_path
-        return result
-
-    elif file_type == 'video_note':
-        media_dir = f'{chat_export_name}/round_video_messages'
-        os.makedirs(media_dir, exist_ok=True)
-
-        # TODO: by default don't have name
-        date = message.date.strftime('%d-%m-%Y_%H-%M-%S')
-        vnote_name = f'file_{media_num}@{date}.mp4'
-        vnote_path = f'{media_dir}/{vnote_name}'
-
-        if message.video_note.thumbs is not None:
-            thumb_name = f'{vnote_name}_thumb.jpg'
-            thumb_path = f'{media_dir}/{thumb_name}'
-        else:
-            thumb_name = None
-            thumb_path = None
-
-        vnote_relative_path = f'round_video_messages/{vnote_name}'
-        thumb_relative_path = f'round_video_messages/{thumb_name}'
-
-        result = (
-            vnote_path,
-            thumb_path,
-            vnote_relative_path,
-            thumb_relative_path
-        )
-        return result
-
-    elif file_type == 'sticker':
-        media_dir = f'{chat_export_name}/stickers'
-        os.makedirs(media_dir, exist_ok=True)
-
-        if message.sticker.file_name is not None:
-            sticker_name = message.sticker.file_name
-            sticker_path = f'{media_dir}/{sticker_name}'
-        else:
-            # TODO: set name
-            sticker_name = 'random name'
-            sticker_path = 'random name'
-
-        if message.sticker.thumbs is not None:
-            thumb_name = f'{sticker_name}_thumb.jpg'
-            thumb_path = f'{media_dir}/{thumb_name}'
-        else:
-            thumb_name = None
-            thumb_path = None
-
-        sticker_relative_path = f'stickers/{sticker_name}'
-        thumb_relative_path = f'stickers/{thumb_name}'
-
-        result = (
-            sticker_path,
-            thumb_path,
-            sticker_relative_path,
-            thumb_relative_path
-        )
-        return result
-
-    elif file_type == 'animation':
-        media_dir = f'{chat_export_name}/video_files'
-        os.makedirs(media_dir, exist_ok=True)
-        if message.animation.file_name is not None:
-            animation_name = message.animation.file_name
-            animation_path = f'{media_dir}/{animation_name}'
-        else:
-            # TODO: set name
-            animation_name = 'random name'
-            animation_path = 'random name'
-
-        if message.animation.thumbs is not None:
-            thumb_name = f'{animation_name}_thumb.jpg'
-            thumb_path = f'{media_dir}/{thumb_name}'
-        else:
-            thumb_name = None
-            thumb_path = None
-
-        animation_relative_path = f'video_files/{animation_name}'
-        thumb_relative_path = f'video_files/{thumb_name}'
-
-        result = (
-            animation_path,
-            thumb_path,
-            animation_relative_path,
-            thumb_relative_path
-        )
-        return result
-
-    elif file_type == 'audio':
-        media_dir = f'{chat_export_name}/files'
-        os.makedirs(media_dir, exist_ok=True)
-
-        if message.audio.file_name is not None:
-            audio_name = message.audio.file_name
-            audio_path = f'{media_dir}/{audio_name}'
-        else:
-            # TODO: set name
-            audio_name = 'random name'
-            audio_path = 'random name'
-
-        if message.audio.thumbs is not None:
-            thumb_name = f'{audio_name}_thumb.jpg'
-            thumb_path = f'{media_dir}/{thumb_name}'
-        else:
-            thumb_name = None
-            thumb_path = None
-
-        audio_relative_path = f'files/{audio_name}'
-        thumb_relative_path = f'files/{thumb_name}'
-
-        result = audio_path, thumb_path, audio_relative_path, thumb_relative_path
-        return result
-
-    elif file_type == 'document':
-        media_dir = f'{chat_export_name}/files'
-        os.makedirs(media_dir, exist_ok=True)
-        if message.document.file_name is not None:
-            doc_name = message.document.file_name
-            doc_path = f'{media_dir}/{doc_name}'
-        else:
-            # TODO: set name
-            doc_name = 'random name'
-            doc_path = 'random name'
-            pass
-
-        if message.document.thumbs is not None:
-            thumb_name = f'{doc_name}_thumb.jpg'
-            thumb_path = f'{media_dir}/{thumb_name}'
-        else:
-            thumb_name = None
-            thumb_path = None
-
-        doc_relative_path = f'files/{doc_name}'
-        thumb_relative_path = f'files/{thumb_name}'
-
-        result = doc_path, thumb_path, doc_relative_path, thumb_relative_path
-        return result
+    if message.video_note.thumbs is not None:
+        thumb_name = f'{vnote_name}_thumb.jpg'
+        thumb_path = f'{media_dir}/{thumb_name}'
     else:
-        # contact
-        media_dir = f'{chat_export_name}/contacts'
-        os.makedirs(media_dir, exist_ok=True)
-        contact_name = f'contact_{media_num}.vcard'
-        contact_path = f'{media_dir}/{contact_name}'
-        contact_relative_path = f'contacts/{contact_name}'
-        return contact_path, contact_relative_path
+        # TODO: fix
+        thumb_name = None
+        thumb_path = None
+
+    vnote_relative_path = f'round_video_messages/{vnote_name}'
+    thumb_relative_path = f'round_video_messages/{thumb_name}'
+
+    result = (
+        vnote_path,
+        thumb_path,
+        vnote_relative_path,
+        thumb_relative_path
+    )
+    return result
+
+
+def get_sticker_name(
+    message: Message,
+    username: str,
+    media_num: int = None
+) -> tuple:
+    chat_export_date = datetime.now().strftime("%Y-%m-%d")
+    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    # TODO: when user want other path
+    path = ''
+    media_dir = f'{chat_export_name}/stickers'
+    os.makedirs(media_dir, exist_ok=True)
+
+    if message.sticker.file_name is not None:
+        sticker_name = message.sticker.file_name
+        sticker_path = f'{media_dir}/{sticker_name}'
+    else:
+        # TODO: set name
+        sticker_name = 'random name'
+        sticker_path = 'random name'
+
+    if message.sticker.thumbs is not None:
+        thumb_name = f'{sticker_name}_thumb.jpg'
+        thumb_path = f'{media_dir}/{thumb_name}'
+    else:
+        # TODO: fix
+        thumb_name = None
+        thumb_path = None
+
+    sticker_relative_path = f'stickers/{sticker_name}'
+    thumb_relative_path = f'stickers/{thumb_name}'
+
+    result = (
+        sticker_path,
+        thumb_path,
+        sticker_relative_path,
+        thumb_relative_path
+    )
+    return result
+
+
+def get_animation_name(
+    message: Message,
+    username: str,
+    media_num: int = None
+) -> tuple:
+    chat_export_date = datetime.now().strftime("%Y-%m-%d")
+    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    # TODO: when user want other path
+    path = ''
+    media_dir = f'{chat_export_name}/video_files'
+    os.makedirs(media_dir, exist_ok=True)
+    if message.animation.file_name is not None:
+        animation_name = message.animation.file_name
+        animation_path = f'{media_dir}/{animation_name}'
+    else:
+        # TODO: set name
+        animation_name = 'random name'
+        animation_path = 'random name'
+
+    if message.animation.thumbs is not None:
+        thumb_name = f'{animation_name}_thumb.jpg'
+        thumb_path = f'{media_dir}/{thumb_name}'
+    else:
+        thumb_name = None
+        thumb_path = None
+
+    animation_relative_path = f'video_files/{animation_name}'
+    thumb_relative_path = f'video_files/{thumb_name}'
+
+    result = (
+        animation_path,
+        thumb_path,
+        animation_relative_path,
+        thumb_relative_path
+    )
+    return result
+
+
+def get_audio_name(
+    message: Message,
+    username: str,
+    media_num: int = None
+) -> tuple:
+    chat_export_date = datetime.now().strftime("%Y-%m-%d")
+    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    # TODO: when user want other path
+    path = ''
+
+    media_dir = f'{chat_export_name}/files'
+    os.makedirs(media_dir, exist_ok=True)
+
+    if message.audio.file_name is not None:
+        audio_name = message.audio.file_name
+        audio_path = f'{media_dir}/{audio_name}'
+    else:
+        # TODO: set name
+        audio_name = 'random name'
+        audio_path = 'random name'
+
+    if message.audio.thumbs is not None:
+        thumb_name = f'{audio_name}_thumb.jpg'
+        thumb_path = f'{media_dir}/{thumb_name}'
+    else:
+        thumb_name = None
+        thumb_path = None
+
+    audio_relative_path = f'files/{audio_name}'
+    thumb_relative_path = f'files/{thumb_name}'
+
+    result = audio_path, thumb_path, audio_relative_path, thumb_relative_path
+    return result
+
+
+def get_document_name(
+    message: Message,
+    username: str,
+    media_num: int = None
+) -> tuple:
+    chat_export_date = datetime.now().strftime("%Y-%m-%d")
+    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    # TODO: when user want other path
+    path = ''
+
+    media_dir = f'{chat_export_name}/files'
+    os.makedirs(media_dir, exist_ok=True)
+    if message.document.file_name is not None:
+        doc_name = message.document.file_name
+        doc_path = f'{media_dir}/{doc_name}'
+    else:
+        # TODO: set name
+        doc_name = 'random name'
+        doc_path = 'random name'
+
+    if message.document.thumbs is not None:
+        thumb_name = f'{doc_name}_thumb.jpg'
+        thumb_path = f'{media_dir}/{thumb_name}'
+    else:
+        thumb_name = None
+        thumb_path = None
+
+    doc_relative_path = f'files/{doc_name}'
+    thumb_relative_path = f'files/{thumb_name}'
+
+    result = doc_path, thumb_path, doc_relative_path, thumb_relative_path
+    return result
+
+
+def get_contact_name(
+    username: str,
+    media_num: int,
+) -> tuple:
+    chat_export_date = datetime.now().strftime("%Y-%m-%d")
+    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    # TODO: when user want other path
+    path = ''
+    media_dir = f'{chat_export_name}/contacts'
+    os.makedirs(media_dir, exist_ok=True)
+    contact_name = f'contact_{media_num}.vcard'
+    contact_path = f'{media_dir}/{contact_name}'
+    contact_relative_path = f'contacts/{contact_name}'
+    return contact_path, contact_relative_path
 
 
 def convert_to_unixtime(date: datetime):
