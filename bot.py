@@ -7,6 +7,8 @@ from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
 from config import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, FILE_NOT_FOUND
+from channels import Channel
+from privates import Private
 
 app = Client(
     "my_bot",
@@ -15,22 +17,38 @@ app = Client(
 )
 
 # if you want to get "saved messages", use "me" or "myself"
-chat_ids = ['mo_ein']
+# TODO: seperate custom id and all ids
+chat_ids = []
 
 
 async def main():
     async with app:
         # await app.send_message('me', 'ping!')
+
+        global chat_ids
+        # but this is for all channels
+        if CHAT_EXPORT['public_channels'] is True: 
+            channels_id = await Channel(app).get_channels_list()
+            chat_ids = channels_id + chat_ids
+
+        
+        # TODO: but this is for all groups
+        if CHAT_EXPORT['public_groups'] is True: 
+            channels_id = await channel(app).get_channels_list()
+            # chat_ids += channels_id
+
+        # just personal chats not bots
+        if CHAT_EXPORT['personal_chats'] is True: 
+            privates_id = await Private(app).get_privates_list()
+            chat_ids = chat_ids + privates_id
+
+        # print(chat_ids)
         for cid in chat_ids:
             # when use telegram api, channels id have -100 prefix
-            if type(cid) == int:
+            if type(cid) == int and not str(cid).startswith('-100'):
                 new_id = int(f'-100{cid}')
                 chat_ids[chat_ids.index(cid)] = new_id
-            else:
-                if cid.isnumeric():
-                    new_id = int(f'-100{cid}')
-                    chat_ids[chat_ids.index(cid)] = new_id
-
+            
             chat = await app.get_chat(cid)
             # print(chat)
 
@@ -41,20 +59,16 @@ async def main():
             username = ''
             messages = []
             chat_data = {}
-            # read_messages = True
-            # TODO
             # just export all contacts
-            # TODO: CHAT_EXPORT in if statements for export all data in your account.
             # for example all channels, all groups, ...
-            if (chat.type == ChatType.PRIVATE
-                    and CHAT_EXPORT['personal_chats'] is True):
-                user_info = await app.get_users(cid)
-                username = user_info.username
-                chat_data['name'] = user_info.first_name
+            if chat.type == ChatType.PRIVATE:
+                username = chat.username
+                # TODO: lastname
+                chat_data['name'] = chat.first_name
                 chat_data['type'] = 'personal_chat'
-                chat_data['id'] = user_info.id
-            elif (chat.type == ChatType.CHANNEL
-                    and CHAT_EXPORT['public_channels'] is True):
+                chat_data['id'] = chat.id
+                print(username)
+            elif chat.type == ChatType.CHANNEL:
                 username = chat.username
                 chat_data['name'] = chat.title
                 chat_data['type'] = 'public_channel'
@@ -64,8 +78,7 @@ async def main():
                     chat_data['id'] = str(chat.id)[4::]
                 else:
                     chat_data['id'] = chat.id
-            elif (chat.type == ChatType.GROUP
-                    and CHAT_EXPORT['public_groups'] is True):
+            elif chat.type == ChatType.GROUP:
                 username = chat.username
                 chat_data['name'] = chat.title
                 chat_data['type'] = 'public_group'
@@ -73,8 +86,7 @@ async def main():
                     chat_data['id'] = str(chat.id)[4::]
                 else:
                     chat_data['id'] = chat.id
-            elif (chat.type == ChatType.SUPERGROUP
-                    and CHAT_EXPORT['public_groups'] is True):
+            elif chat.type == ChatType.SUPERGROUP:
                 username = chat.username
                 chat_data['name'] = chat.title
                 chat_data['type'] = 'public_supergroup'
@@ -299,6 +311,7 @@ def generate_json_name(username: str, path: str = '') -> str:
     chat_export_date = datetime.now().strftime("%Y-%m-%d")
     chat_export_name = f'ChatExport_{username}_{chat_export_date}'
     json_name = f'{chat_export_name}/result.json'
+    os.makedirs(chat_export_name, exist_ok=True)
     return json_name
 
 

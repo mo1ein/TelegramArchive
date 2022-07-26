@@ -19,10 +19,10 @@ MEDIA_EXPORT = {
 CHAT_EXPORT = {
     'contacts': False,
     'personal_chats': True,
-    'public_channels': True,
-    'public_groups': True,
-    'private_channels': True,
-    'private_groups': True,
+    'public_channels': False,
+    'public_groups': False,
+    'private_channels': False,
+    'private_groups': False,
 }
 
 FILE_NOT_FOUND = '(File not included. Change data exporting settings to download.)'
