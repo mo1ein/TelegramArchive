@@ -261,7 +261,6 @@ async def main():
                         msg_info['file'] = FILE_NOT_FOUND
                         msg_info['thumbnail'] = FILE_NOT_FOUND
                 elif message.contact is not None:
-                    if MEDIA_EXPORT['contacts'] is True:
                         contact_num += 1
                         names = get_contact_name(
                             username,
@@ -272,9 +271,6 @@ async def main():
                             msg_info,
                             names
                         )
-                    else:
-                        # TODO:
-                        pass
                 elif message.location is not None:
                     msg_info['location_information'] = {
                         'latitude': message.location.latitude,
@@ -642,7 +638,6 @@ def get_contact_data(
     names: tuple
 ) -> list:
 
-    vcard_path, vcard_relative_path = names
     contact_data = {'phone_number': message.contact.phone_number}
 
     if message.contact.first_name is not None:
@@ -656,17 +651,22 @@ def get_contact_data(
         contact_data['last_name'] = ''
 
     msg_info['contact_information'] = contact_data
-    msg_info['contact_vcard'] = vcard_relative_path
 
-    # save vcard as file
-    vcard = message.contact.vcard
-    vcard = vcard.split('\n')
-    with open(vcard_path, 'w') as f:
-        for i in vcard:
-            f.write(f'{i}\n')
+    if MEDIA_EXPORT['contacts'] is True:
+        vcard_path, vcard_relative_path = names
+        msg_info['contact_vcard'] = vcard_relative_path
 
-    # TODO: for all contacts
-    # TODO: convert to vcf
+        # save vcard as file
+        vcard = message.contact.vcard
+        vcard = vcard.split('\n')
+        with open(vcard_path, 'w') as f:
+            for i in vcard:
+                f.write(f'{i}\n')
+
+        # TODO: for all contacts
+        # TODO: convert to vcf
+    else:
+        msg_info['contact_vcard'] = FILE_NOT_FOUND
 
 
 def get_photo_name(
