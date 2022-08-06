@@ -1,56 +1,26 @@
 # Telegram-Archive
 ### Export telegram account chats
- - #### All private chats
-    - [x] personal chats
- - #### All channels in your account (include private and public channels)
-    - [] public channels
-    - [] private channels
- - #### All groups in your account (include private and public groups)
-    - [] public groups
-    - [] private groups
- - #### Specefic chats (username or ID)
-    - [x] personal chat
-    - [x] public channel
-    - [x] private channel
-    - [x] public group (need debug)
-    - [x] private group (need debug)
- - #### Channels that restrict saving content
+ - [x] All private chats
+ - [x] Specefic chats (username or ID)
+ - [x] export channels that restrict saving content
+ - [] All contacts in your account
+
+- #### All channels in your account
     - [x] public channels
-    - [x] private channels (if you are joined)
- - #### All contacts in your account
-    - [] done
+    - [] private channels
+- #### All groups in your account
+    - [x] public groups
+    - [] private groups
 
-## Export media in each chat
+### Export media in each chat
  You can choose to export and download each media type
-- ##### text
-    - [x] done
-- ##### sticker
-    - [x] done
-- ##### gif
-    - [x] done
-- ##### photo
-    - [x] done
-- ##### video
-    - [x] done
-- ##### music
-    - [x] done
-- ##### document
-    - [x] done
-- ##### video message
-    - [x] done
-- ##### voice message
-    - [x] done
-- ##### contact
-    - [x] done
-- ##### location
-    - [x] done
 
-## Export assholes chat
+### Export assholes chat
 - [] Export telegram chat for each T (time: minutes) to backup asshole people chat who delete chats both-side.
 
-## Output messages
+### Output messages
 - [x] json
 - [] html
 
 ## Contribute
-##### That's very enjoyable for me if you contribute. You can fix `TODO`'s or any problem, bug, and items not checked in `README`.
+##### That's very enjoyable for me if you contribute. You can fix `TODO`'s or any problem, bug and tasks in `README`.
