@@ -23,9 +23,12 @@ class Chat:
                 if dialog.chat.type == ChatType.GROUP:
                     dialog_ids.append(dialog.chat.id)
 
-            # just personal chats not bots
             if CHAT_EXPORT['personal_chats'] is True: 
                 if dialog.chat.type == ChatType.PRIVATE:
+                    dialog_ids.append(dialog.chat.id)
+            
+            if CHAT_EXPORT['bot_chats'] is True: 
+                if dialog.chat.type == ChatType.BOT:
                     dialog_ids.append(dialog.chat.id)
 
         return dialog_ids
