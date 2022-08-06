@@ -7,8 +7,7 @@ from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
 from config import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, FILE_NOT_FOUND
-from channels import Channel
-from privates import Private
+from chats import Chat
 
 app = Client(
     "my_bot",
@@ -26,21 +25,8 @@ async def main():
         # await app.send_message('me', 'ping!')
 
         global chat_ids
-        # but this is for all channels
-        if CHAT_EXPORT['public_channels'] is True: 
-            channels_id = await Channel(app).get_channels_list()
-            chat_ids = channels_id + chat_ids
-
-        
-        # TODO: but this is for all groups
-        if CHAT_EXPORT['public_groups'] is True: 
-            channels_id = await channel(app).get_channels_list()
-            # chat_ids += channels_id
-
-        # just personal chats not bots
-        if CHAT_EXPORT['personal_chats'] is True: 
-            privates_id = await Private(app).get_privates_list()
-            chat_ids = chat_ids + privates_id
+        all_dialogs_id = await Chat(app).get_ids()
+        chat_ids += all_dialogs_id
 
         # print(chat_ids)
         for cid in chat_ids:
