@@ -1,8 +1,9 @@
-
 import os
 import json
 import time
 from datetime import datetime
+import uuid
+
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
@@ -34,7 +35,7 @@ async def main():
             if type(cid) == int and not str(cid).startswith('-100'):
                 new_id = int(f'-100{cid}')
                 chat_ids[chat_ids.index(cid)] = new_id
-            
+
             chat = await app.get_chat(cid)
             # print(chat)
 
@@ -60,26 +61,17 @@ async def main():
                 chat_data['type'] = 'public_channel'
                 # when using telegram api ids have -100 prefix
                 # https://stackoverflow.com/questions/33858927/how-to-obtain-the-chat-id-of-a-private-telegram-channel
-                if str(chat.id).startswith('-100'):
-                    chat_data['id'] = str(chat.id)[4::]
-                else:
-                    chat_data['id'] = chat.id
+                chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
             elif chat.type == ChatType.GROUP:
                 username = chat.username
                 chat_data['name'] = chat.title
                 chat_data['type'] = 'public_group'
-                if str(chat.id).startswith('-100'):
-                    chat_data['id'] = str(chat.id)[4::]
-                else:
-                    chat_data['id'] = chat.id
+                chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
             elif chat.type == ChatType.SUPERGROUP:
                 username = chat.username
                 chat_data['name'] = chat.title
                 chat_data['type'] = 'public_supergroup'
-                if str(chat.id).startswith('-100'):
-                    chat_data['id'] = str(chat.id)[4::]
-                else:
-                    chat_data['id'] = chat.id
+                chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
             # TODO: private SUPERGROUP and GROUP
             else:
                 # bot? other chat types
@@ -223,7 +215,7 @@ async def main():
                 elif message.voice is not None:
                     if MEDIA_EXPORT['voice_messages'] is True:
                         voice_num += 1
-                        names = get_audio_name(
+                        names = get_voice_name(
                             message,
                             username,
                             voice_num
@@ -247,16 +239,16 @@ async def main():
                         msg_info['file'] = FILE_NOT_FOUND
                         msg_info['thumbnail'] = FILE_NOT_FOUND
                 elif message.contact is not None:
-                        contact_num += 1
-                        names = get_contact_name(
-                            username,
-                            contact_num
-                        )
-                        get_contact_data(
-                            message,
-                            msg_info,
-                            names
-                        )
+                    contact_num += 1
+                    names = get_contact_name(
+                        username,
+                        contact_num
+                    )
+                    get_contact_data(
+                        message,
+                        msg_info,
+                        names
+                    )
                 elif message.location is not None:
                     msg_info['location_information'] = {
                         'latitude': message.location.latitude,
@@ -494,9 +486,9 @@ async def get_audio_data(
 
 
 async def get_voice_data(
-        message: Message,
-        msg_info: dict,
-        names: tuple
+    message: Message,
+    msg_info: dict,
+    names: tuple
 ) -> None:
     voice_path, voice_relative_path = names
     try:
@@ -560,6 +552,7 @@ def get_text_data(message: Message, text_mode: str) -> list:
             return text
 
     # TODO: bug. remove entitiy part from all message
+    # TODO: use switch case
     for e in entities:
         txt = {}
         if e.type == MessageEntityType.URL:
@@ -623,7 +616,6 @@ def get_contact_data(
     msg_info: dict,
     names: tuple
 ) -> list:
-
     contact_data = {'phone_number': message.contact.phone_number}
 
     if message.contact.first_name is not None:
@@ -688,13 +680,10 @@ def get_video_name(
     path = ''
     media_dir = f'{chat_export_name}/video_files'
     os.makedirs(media_dir, exist_ok=True)
-    if message.video.file_name is not None:
-        video_name = message.video.file_name
-        video_path = f'{media_dir}/{video_name}'
-    else:
-        # TODO: set name
-        video_name = 'random name'
-        video_path = 'random name'
+
+    # TODO: gen better way random str
+    video_name = str(uuid.uuid4()) if message.video.file_name is None else message.video.file_name
+    video_path = f'{media_dir}/{video_name}'
 
     if message.video.thumbs is not None:
         thumb_name = f'{video_name}_thumb.jpg'
@@ -704,7 +693,7 @@ def get_video_name(
         thumb_path = None
 
     video_relative_path = f'video_files/{video_name}'
-    thumb_relative_path = f'video_files/{thumb_name}'
+    thumb_relative_path = None if thumb_name is None else f'video_files/{thumb_name}'
 
     result = (
         video_path,
@@ -758,12 +747,11 @@ def get_video_note_name(
         thumb_name = f'{vnote_name}_thumb.jpg'
         thumb_path = f'{media_dir}/{thumb_name}'
     else:
-        # TODO: fix
         thumb_name = None
         thumb_path = None
 
     vnote_relative_path = f'round_video_messages/{vnote_name}'
-    thumb_relative_path = f'round_video_messages/{thumb_name}'
+    thumb_relative_path = None if thumb_name is None else f'round_video_messages/{thumb_name}'
 
     result = (
         vnote_path,
@@ -785,25 +773,19 @@ def get_sticker_name(
     path = ''
     media_dir = f'{chat_export_name}/stickers'
     os.makedirs(media_dir, exist_ok=True)
-
-    if message.sticker.file_name is not None:
-        sticker_name = message.sticker.file_name
-        sticker_path = f'{media_dir}/{sticker_name}'
-    else:
-        # TODO: set name
-        sticker_name = 'random name'
-        sticker_path = 'random name'
+    # TODO: gen better way random str
+    sticker_name = str(uuid.uuid4()) if message.sticker.file_name is None else message.sticker.file_name
+    sticker_path = f'{media_dir}/{sticker_name}'
 
     if message.sticker.thumbs is not None:
         thumb_name = f'{sticker_name}_thumb.jpg'
         thumb_path = f'{media_dir}/{thumb_name}'
     else:
-        # TODO: fix
         thumb_name = None
         thumb_path = None
 
     sticker_relative_path = f'stickers/{sticker_name}'
-    thumb_relative_path = f'stickers/{thumb_name}'
+    thumb_relative_path = None if thumb_name is None else f'stickers/{thumb_name}'
 
     result = (
         sticker_path,
@@ -825,13 +807,10 @@ def get_animation_name(
     path = ''
     media_dir = f'{chat_export_name}/video_files'
     os.makedirs(media_dir, exist_ok=True)
-    if message.animation.file_name is not None:
-        animation_name = message.animation.file_name
-        animation_path = f'{media_dir}/{animation_name}'
-    else:
-        # TODO: set name
-        animation_name = 'random name'
-        animation_path = 'random name'
+
+    # TODO: gen better way random str
+    animation_name = str(uuid.uuid4()) if message.animation.file_name is None else message.animation.file_name
+    animation_path = f'{media_dir}/{animation_name}'
 
     if message.animation.thumbs is not None:
         thumb_name = f'{animation_name}_thumb.jpg'
@@ -841,8 +820,7 @@ def get_animation_name(
         thumb_path = None
 
     animation_relative_path = f'video_files/{animation_name}'
-    thumb_relative_path = f'video_files/{thumb_name}'
-
+    thumb_relative_path = None if thumb_name is None else f'video_files/{thumb_name}'
     result = (
         animation_path,
         thumb_path,
@@ -865,13 +843,9 @@ def get_audio_name(
     media_dir = f'{chat_export_name}/files'
     os.makedirs(media_dir, exist_ok=True)
 
-    if message.audio.file_name is not None:
-        audio_name = message.audio.file_name
-        audio_path = f'{media_dir}/{audio_name}'
-    else:
-        # TODO: set name
-        audio_name = 'random name'
-        audio_path = 'random name'
+    # TODO: gen better way random str
+    audio_name = str(uuid.uuid4()) if message.audio.file_name is None else message.audio.file_name
+    audio_path = f'{media_dir}/{audio_name}'
 
     if message.audio.thumbs is not None:
         thumb_name = f'{audio_name}_thumb.jpg'
@@ -881,7 +855,7 @@ def get_audio_name(
         thumb_path = None
 
     audio_relative_path = f'files/{audio_name}'
-    thumb_relative_path = f'files/{thumb_name}'
+    thumb_relative_path = None if thumb_name is None else f'files/{thumb_name}'
 
     result = audio_path, thumb_path, audio_relative_path, thumb_relative_path
     return result
@@ -899,13 +873,10 @@ def get_document_name(
 
     media_dir = f'{chat_export_name}/files'
     os.makedirs(media_dir, exist_ok=True)
-    if message.document.file_name is not None:
-        doc_name = message.document.file_name
-        doc_path = f'{media_dir}/{doc_name}'
-    else:
-        # TODO: set name
-        doc_name = 'random name'
-        doc_path = 'random name'
+
+    # TODO: gen better way random str
+    doc_name = str(uuid.uuid4()) if message.document.file_name is None else message.document.file_name
+    doc_path = f'{media_dir}/{doc_name}'
 
     if message.document.thumbs is not None:
         thumb_name = f'{doc_name}_thumb.jpg'
@@ -915,7 +886,7 @@ def get_document_name(
         thumb_path = None
 
     doc_relative_path = f'files/{doc_name}'
-    thumb_relative_path = f'files/{thumb_name}'
+    thumb_relative_path = None if thumb_name is None else f'files/{thumb_name}'
 
     result = doc_path, thumb_path, doc_relative_path, thumb_relative_path
     return result
