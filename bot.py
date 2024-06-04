@@ -8,7 +8,7 @@ from typing import Union
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
-from config import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, FILE_NOT_FOUND
+from configs import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, CHAT_IDS, FILE_NOT_FOUND
 from chats import Chat
 
 app = Client(
@@ -20,20 +20,18 @@ app = Client(
 
 async def main():
     async with app:
-        # TODO: read specific chats from config file if empty, get all chats
-        # if you want to get "saved messages", use "me" or "myself"
-        chat_ids = []
-        if not chat_ids:
-            all_dialogs_id = await Chat(app).get_ids()
-            chat_ids += all_dialogs_id
 
-        archive = Archive(chat_ids)
-        print(chat_ids)
-        for cid in chat_ids:
+        if not CHAT_IDS:
+            all_dialogs_id = await Chat(app).get_ids()
+            CHAT_IDS.extend(all_dialogs_id)
+
+        archive = Archive(CHAT_IDS)
+
+        for cid in CHAT_IDS:
             # when use telegram api, channels id have -100 prefix
             if type(cid) == int and not str(cid).startswith('-100'):
                 new_id = int(f'-100{cid}')
-                chat_ids[chat_ids.index(cid)] = new_id
+                CHAT_IDS[CHAT_IDS.index(cid)] = new_id
 
             chat = await app.get_chat(cid)
             archive.fill_chat_data(chat)
@@ -91,6 +89,7 @@ class Archive:
                 pass
 
     async def process_message(self, chat, message, msg_info: dict) -> None:
+        # TODO: move msg_info filling to other function
         msg_info['id'] = message.id
         msg_info['type'] = 'message'
         msg_info['date'] = message.date.strftime('%Y-%m-%dT%H:%M:%S')
@@ -259,18 +258,18 @@ class Archive:
 
         if message.text is not None:
             text = get_text_data(message, 'text')
-            if text != []:
+            if text:
                 text.append(message.text)
                 msg_info['text'] = text
             else:
                 msg_info['text'] = message.text
         elif message.caption is not None:
-            text = get_text_data(message, 'caption')
-            if text != []:
-                text.append(message.caption)
-                msg_info['text'] = text
+            caption = get_text_data(message, 'caption')
+            if caption:
+                caption.append(message.caption)
+                msg_info['caption'] = caption
             else:
-                msg_info['text'] = message.caption
+                msg_info['caption'] = message.caption
         else:
             msg_info['text'] = ''
         self.messages.append(msg_info)
@@ -546,65 +545,60 @@ def get_text_data(message: Message, text_mode: str) -> list:
         else:
             return text
 
-    # TODO: bug. remove entitiy part from all message
-    # TODO: use switch case
     for e in entities:
         txt = {}
-        if e.type == MessageEntityType.URL:
-            txt['type'] = 'link'
-        elif e.type == MessageEntityType.HASHTAG:
-            txt['type'] = 'hashtag'
-        elif e.type == MessageEntityType.CASHTAG:
-            txt['type'] = 'cashtag'
-        elif e.type == MessageEntityType.BOT_COMMAND:
-            txt['type'] = 'bot_command'
-        elif e.type == MessageEntityType.MENTION:
-            txt['type'] = 'mention'
-        elif e.type == MessageEntityType.EMAIL:
-            txt['type'] = 'email'
-        elif e.type == MessageEntityType.PHONE_NUMBER:
-            txt['type'] = 'phone_number'
-        elif e.type == MessageEntityType.BOLD:
-            txt['type'] = 'bold'
-        elif e.type == MessageEntityType.ITALIC:
-            txt['type'] = 'italic'
-        elif e.type == MessageEntityType.UNDERLINE:
-            txt['type'] = 'underline'
-        elif e.type == MessageEntityType.STRIKETHROUGH:
-            txt['type'] = 'strikethrough'
-        elif e.type == MessageEntityType.SPOILER:
-            txt['type'] = 'spoiler'
-        elif e.type == MessageEntityType.CODE:
-            # TODO: other parts??
-            txt['type'] = 'code'
-        elif e.type == MessageEntityType.PRE:
-            txt['type'] = 'pre'
-            txt['language'] = ''
-        elif e.type == MessageEntityType.BLOCKQUOTE:
-            # TODO: other parts??
-            txt['type'] = 'blockquote'
-        elif e.type == MessageEntityType.TEXT_LINK:
-            txt['type'] = 'text_link'
-            txt['href'] = e.url
-        elif e.type == MessageEntityType.TEXT_MENTION:
-            # TODO: other parts??
-            txt['type'] = 'text_mention'
-        elif e.type == MessageEntityType.BANK_CARD:
-            # TODO: other parts??
-            txt['type'] = 'bank_card'
-        # TODO: add other formats...
-        else:
-            # TODO: other parts??
-            txt['type'] = 'unknown'
+        match e.type:
+            case MessageEntityType.URL:
+                txt['type'] = 'link'
+            case MessageEntityType.HASHTAG:
+                txt['type'] = 'hashtag'
+            case MessageEntityType.CASHTAG:
+                txt['type'] = 'cashtag'
+            case MessageEntityType.BOT_COMMAND:
+                txt['type'] = 'bot_command'
+            case MessageEntityType.MENTION:
+                txt['type'] = 'mention'
+            case MessageEntityType.EMAIL:
+                txt['type'] = 'email'
+            case MessageEntityType.PHONE_NUMBER:
+                txt['type'] = 'phone_number'
+            case MessageEntityType.BOLD:
+                txt['type'] = 'bold'
+            case MessageEntityType.ITALIC:
+                txt['type'] = 'italic'
+            case MessageEntityType.UNDERLINE:
+                txt['type'] = 'underline'
+            case MessageEntityType.STRIKETHROUGH:
+                txt['type'] = 'strikethrough'
+            case MessageEntityType.SPOILER:
+                txt['type'] = 'spoiler'
+            case MessageEntityType.CODE:
+                txt['type'] = 'code'
+            case MessageEntityType.PRE:
+                txt['type'] = 'pre'
+                txt['language'] = ''
+            case MessageEntityType.BLOCKQUOTE:
+                txt['type'] = 'blockquote'
+            case MessageEntityType.TEXT_LINK:
+                txt['type'] = 'text_link'
+                txt['href'] = e.url
+            case MessageEntityType.TEXT_MENTION:
+                txt['type'] = 'text_mention'
+            case MessageEntityType.BANK_CARD:
+                txt['type'] = 'bank_card'
+            case MessageEntityType.CUSTOM_EMOJI:
+                txt['type'] = 'custom_emoji'
+            case _:
+                txt['type'] = 'unknown'
 
         if text_mode == 'text':
-            txt['text'] = message.text[e.offset:e.length]
+            txt['text'] = message.text[e.offset:e.offset + e.length]
         else:
-            txt['text'] = message.caption[e.offset:e.length]
+            txt['text'] = message.caption[e.offset:e.offset + e.length]
         text.append(txt)
     return text
 
-
+    
 # TODO: fix better typing
 def get_contact_data(
     message: Message,
@@ -620,9 +614,6 @@ def get_contact_data(
         vcard_path, vcard_relative_path = names
         msg_info['contact_vcard'] = vcard_relative_path
 
-        # print("vcards: ", vcard_path, vcard_relative_path)
-        # print("message contact:", message.contact)
-
         # convert to vcard
         vcard = (
             'BEGIN:VCARD\n'
@@ -632,7 +623,6 @@ def get_contact_data(
             f'TEL;TYPE=CELL:{message.contact.phone_number}\n'
             'END:VCARD\n'
         ) 
-        print("**vcard: ", vcard)
         with open(vcard_path, 'w') as f:
             f.write(vcard)
     else:
