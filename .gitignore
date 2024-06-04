@@ -142,3 +142,4 @@ todo
 *.jpeg
 *.png
 *.ogg
+*.session-journal
