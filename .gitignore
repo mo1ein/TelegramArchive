@@ -131,3 +131,15 @@ dmypy.json
 .pyre/
 .idea/
 todo
+*.vcf
+*.pdf
+*.mp3
+*.mp4
+*.mov
+*.mkv
+*.zip
+*.jpg
+*.jpeg
+*.png
+*.ogg
+*.session-journal

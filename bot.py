@@ -3,11 +3,12 @@ import json
 import time
 from datetime import datetime
 import uuid
+from typing import Union
 
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
-from config import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, FILE_NOT_FOUND
+from configs import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, CHAT_IDS, FILE_NOT_FOUND
 from chats import Chat
 
 app = Client(
@@ -16,66 +17,24 @@ app = Client(
     api_hash=API_HASH,
 )
 
-# if you want to get "saved messages", use "me" or "myself"
-# TODO: seperate custom id and all ids
-chat_ids = []
-
 
 async def main():
     async with app:
-        # await app.send_message('me', 'ping!')
 
-        global chat_ids
-        all_dialogs_id = await Chat(app).get_ids()
-        chat_ids += all_dialogs_id
+        if not CHAT_IDS:
+            all_dialogs_id = await Chat(app).get_ids()
+            CHAT_IDS.extend(all_dialogs_id)
 
-        # print(chat_ids)
-        for cid in chat_ids:
+        archive = Archive(CHAT_IDS)
+
+        for cid in CHAT_IDS:
             # when use telegram api, channels id have -100 prefix
             if type(cid) == int and not str(cid).startswith('-100'):
                 new_id = int(f'-100{cid}')
-                chat_ids[chat_ids.index(cid)] = new_id
+                CHAT_IDS[CHAT_IDS.index(cid)] = new_id
 
             chat = await app.get_chat(cid)
-            # print(chat)
-
-            voice_num = 0
-            photo_num = 0
-            contact_num = 0
-            video_message_num = 0
-            username = ''
-            messages = []
-            chat_data = {}
-            # just export all contacts
-            # for example all channels, all groups, ...
-            if chat.type == ChatType.PRIVATE:
-                username = chat.username
-                # TODO: lastname
-                chat_data['name'] = chat.first_name
-                chat_data['type'] = 'personal_chat'
-                chat_data['id'] = chat.id
-                print(username)
-            elif chat.type == ChatType.CHANNEL:
-                username = chat.username
-                chat_data['name'] = chat.title
-                chat_data['type'] = 'public_channel'
-                # when using telegram api ids have -100 prefix
-                # https://stackoverflow.com/questions/33858927/how-to-obtain-the-chat-id-of-a-private-telegram-channel
-                chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
-            elif chat.type == ChatType.GROUP:
-                username = chat.username
-                chat_data['name'] = chat.title
-                chat_data['type'] = 'public_group'
-                chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
-            elif chat.type == ChatType.SUPERGROUP:
-                username = chat.username
-                chat_data['name'] = chat.title
-                chat_data['type'] = 'public_supergroup'
-                chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
-            # TODO: private SUPERGROUP and GROUP
-            else:
-                # bot? other chat types
-                pass
+            archive.fill_chat_data(chat)
 
             # TODO: add exception for private channels
             # read messages from first to last
@@ -83,202 +42,238 @@ async def main():
             all_messages.reverse()
             for message in all_messages:
                 # TODO: add initial message of channel
-                # print(message)
                 msg_info = {}
-                msg_info['id'] = message.id
-                msg_info['type'] = 'message'
-                msg_info['date'] = message.date.strftime('%Y-%m-%dT%H:%M:%S')
-                msg_info['date_unixtime'] = convert_to_unixtime(message.date)
+                await archive.process_message(chat, message, msg_info)
 
-                # set chat name
-                # this part is so shitty fix THIS
-                if chat.type == ChatType.PRIVATE:
-                    name = ''
-                    if message.from_user.first_name is not None:
-                        name += message.from_user.first_name
-                    if message.from_user.last_name is not None:
-                        if name != '':
-                            name += f' {message.from_user.last_name}'
-                        else:
-                            name += message.from_user.last_name
-                    msg_info['from'] = name
-                    msg_info['from_id'] = f'user{message.from_user.id}'
-                else:
-                    msg_info['from'] = chat.title
-                    # TODO: is this correct for groups?
-                    if chat.type == ChatType.CHANNEL:
-                        if str(message.sender_chat.id).startswith('-100'):
-                            msg_info['from_id'] = f'channel{str(message.sender_chat.id)[4::]}'
-                        else:
-                            msg_info['from_id'] = f'channel{str(message.sender_chat.id)}'
-                    else:
-                        pass
-                        # print(message)
-                        # TODO: use from user...
-
-                if message.reply_to_message_id is not None:
-                    msg_info['reply_to_message_id'] = message.reply_to_message_id
-
-                if message.forward_from_chat is not None:
-                    msg_info['forwarded_from'] = message.forward_from_chat.title
-                elif message.forward_from is not None:
-                    msg_info['forwarded_from'] = message.forward_from.first_name
-
-                # TODO: type service. actor...
-
-                if message.sticker is not None:
-                    if MEDIA_EXPORT['stickers'] is True:
-                        names = get_sticker_name(
-                            message,
-                            username
-                        )
-                        await get_sticker_data(message, msg_info, names)
-                    else:
-                        msg_info['file'] = FILE_NOT_FOUND
-                        msg_info['thumbnail'] = FILE_NOT_FOUND
-                        msg_info['media_type'] = 'sticker'
-                        msg_info['sticker_emoji'] = message.sticker.emoji
-                        msg_info['width'] = message.sticker.width
-                        msg_info['height'] = message.sticker.height
-                elif message.animation is not None:
-                    if MEDIA_EXPORT['animations'] is True:
-                        names = get_animation_name(message, username)
-                        await get_animation_data(
-                            message,
-                            msg_info,
-                            names
-                        )
-                    else:
-                        msg_info['file'] = FILE_NOT_FOUND
-                        msg_info['thumbnail'] = FILE_NOT_FOUND
-                        msg_info['media_type'] = 'animation'
-                        msg_info['mime_type'] = message.animation.mime_type
-                        msg_info['width'] = message.animation.width
-                elif message.photo is not None:
-                    if MEDIA_EXPORT['photos'] is True:
-                        photo_num += 1
-                        names = get_photo_name(
-                            message,
-                            username,
-                            photo_num
-                        )
-                        await get_photo_data(
-                            message,
-                            msg_info,
-                            names
-                        )
-                    else:
-                        msg_info['photo'] = FILE_NOT_FOUND
-                        msg_info['width'] = message.photo.width
-                        msg_info['height'] = message.photo.height
-                elif message.video is not None:
-                    if MEDIA_EXPORT['videos'] is True:
-                        names = get_video_name(message, username)
-                        await get_video_data(message, msg_info, names)
-                    else:
-                        msg_info['file'] = FILE_NOT_FOUND
-                        msg_info['thumbnail'] = FILE_NOT_FOUND
-                        msg_info['media_type'] = 'video_file'
-                        msg_info['mime_type'] = message.video.mime_type
-                        msg_info['duration_seconds'] = message.video.duration
-                        msg_info['width'] = message.video.width
-                elif message.video_note is not None:
-                    if MEDIA_EXPORT['video_messages'] is True:
-                        video_message_num += 1
-                        names = get_video_name(
-                            message,
-                            username,
-                            video_message_num
-                        )
-                        await get_video_note_data(
-                            message,
-                            msg_info,
-                            names
-                        )
-                    else:
-                        msg_info['file'] = FILE_NOT_FOUND
-                        msg_info['thumbnail'] = FILE_NOT_FOUND
-                        msg_info['media_type'] = 'video_message'
-                        msg_info['mime_type'] = message.video_note.mime_type
-                        msg_info['duration_seconds'] = message.video_note.duration
-                elif message.audio is not None:
-                    if MEDIA_EXPORT['audios'] is True:
-                        names = get_audio_name(message, username)
-                        await get_audio_data(message, msg_info, names)
-                    else:
-                        msg_info['file'] = FILE_NOT_FOUND
-                        msg_info['thumbnail'] = FILE_NOT_FOUND
-                        msg_info['media_type'] = 'audio_file'
-                        msg_info['performer'] = message.audio.performer
-                        msg_info['title'] = message.audio.title
-                        msg_info['mime_type'] = message.audio.mime_type
-                elif message.voice is not None:
-                    if MEDIA_EXPORT['voice_messages'] is True:
-                        voice_num += 1
-                        names = get_voice_name(
-                            message,
-                            username,
-                            voice_num
-                        )
-                        await get_voice_data(
-                            message,
-                            msg_info,
-                            names
-                        )
-                    else:
-                        msg_info['file'] = FILE_NOT_FOUND
-                elif message.document is not None:
-                    if MEDIA_EXPORT['documents'] is True:
-                        names = get_document_name(message, username)
-                        await get_document_data(
-                            message,
-                            msg_info,
-                            names
-                        )
-                    else:
-                        msg_info['file'] = FILE_NOT_FOUND
-                        msg_info['thumbnail'] = FILE_NOT_FOUND
-                elif message.contact is not None:
-                    contact_num += 1
-                    names = get_contact_name(
-                        username,
-                        contact_num
-                    )
-                    get_contact_data(
-                        message,
-                        msg_info,
-                        names
-                    )
-                elif message.location is not None:
-                    msg_info['location_information'] = {
-                        'latitude': message.location.latitude,
-                        'longitude': message.location.longitude
-                    }
-
-                if message.text is not None:
-                    text = get_text_data(message, 'text')
-                    if text != []:
-                        text.append(message.text)
-                        msg_info['text'] = text
-                    else:
-                        msg_info['text'] = message.text
-                elif message.caption is not None:
-                    text = get_text_data(message, 'caption')
-                    if text != []:
-                        text.append(message.caption)
-                        msg_info['text'] = text
-                    else:
-                        msg_info['text'] = message.caption
-                else:
-                    msg_info['text'] = ''
-
-                messages.append(msg_info)
-                chat_data['messages'] = messages
-
-            json_name = generate_json_name(username=username)
+            json_name = generate_json_name(username=archive.username)
             with open(json_name, mode='w') as f:
-                json.dump(chat_data, f, indent=4, default=str)
+                json.dump(archive.chat_data, f, indent=4, default=str)
 
+
+class Archive:
+    def __init__(self, chat_ids: list = []):
+        self.chat_ids = chat_ids
+        self.voice_num = 0
+        self.photo_num = 0
+        self.contact_num = 0
+        self.video_message_num = 0
+        self.username = ''
+        self.messages = []
+        self.chat_data = {}
+
+    def fill_chat_data(self, chat: Chat) -> None:
+        self.username = chat.username
+        match chat.type:
+            case ChatType.PRIVATE:
+                # TODO: lastname
+                self.chat_data['name'] = chat.first_name
+                self.chat_data['type'] = 'personal_chat'
+                self.chat_data['id'] = chat.id
+            case ChatType.CHANNEL:
+                self.chat_data['name'] = chat.title
+                self.chat_data['type'] = 'public_channel'
+                # when using telegram api ids have -100 prefix
+                # https://stackoverflow.com/questions/33858927/how-to-obtain-the-chat-id-of-a-private-telegram-channel
+                self.chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
+            case ChatType.GROUP:
+                self.chat_data['name'] = chat.title
+                self.chat_data['type'] = 'public_group'
+                self.chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
+            case ChatType.SUPERGROUP:
+                self.chat_data['name'] = chat.title
+                self.chat_data['type'] = 'public_supergroup'
+                self.chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
+            # TODO: private SUPERGROUP and GROUP
+            case _:
+                # bot? other chat types
+                pass
+
+    async def process_message(self, chat, message, msg_info: dict) -> None:
+        # TODO: move msg_info filling to other function
+        msg_info['id'] = message.id
+        msg_info['type'] = 'message'
+        msg_info['date'] = message.date.strftime('%Y-%m-%dT%H:%M:%S')
+        msg_info['date_unixtime'] = convert_to_unixtime(message.date)
+
+        # set chat name
+        # this part is so shitty fix THIS
+        if chat.type == ChatType.PRIVATE:
+            full_name = ''
+            if message.from_user.first_name is not None:
+                full_name += message.from_user.first_name
+            if message.from_user.last_name is not None:
+                full_name += f' {message.from_user.last_name}'
+            msg_info['from'] = full_name
+            msg_info['from_id'] = f'user{message.from_user.id}'
+        else:
+            msg_info['from'] = chat.title
+            # TODO: is this correct for groups?
+            if chat.type == ChatType.CHANNEL:
+                if str(message.sender_chat.id).startswith('-100'):
+                    msg_info['from_id'] = f'channel{str(message.sender_chat.id)[4::]}'
+                else:
+                    msg_info['from_id'] = f'channel{str(message.sender_chat.id)}'
+            else:
+                pass
+                # TODO: use from user...
+
+        if message.reply_to_message_id is not None:
+            msg_info['reply_to_message_id'] = message.reply_to_message_id
+
+        if message.forward_from_chat is not None:
+            msg_info['forwarded_from'] = message.forward_from_chat.title
+        elif message.forward_from is not None:
+            msg_info['forwarded_from'] = message.forward_from.first_name
+
+        # TODO: type service. actor...
+
+        if message.sticker is not None:
+            if MEDIA_EXPORT['stickers'] is True:
+                names = get_sticker_name(
+                    message,
+                    self.username
+                )
+                await get_sticker_data(message, msg_info, names)
+            else:
+                msg_info['file'] = FILE_NOT_FOUND
+                msg_info['thumbnail'] = FILE_NOT_FOUND
+                msg_info['media_type'] = 'sticker'
+                msg_info['sticker_emoji'] = message.sticker.emoji
+                msg_info['width'] = message.sticker.width
+                msg_info['height'] = message.sticker.height
+        elif message.animation is not None:
+            if MEDIA_EXPORT['animations'] is True:
+                names = get_animation_name(message, self.username)
+                await get_animation_data(
+                    message,
+                    msg_info,
+                    names
+                )
+            else:
+                msg_info['file'] = FILE_NOT_FOUND
+                msg_info['thumbnail'] = FILE_NOT_FOUND
+                msg_info['media_type'] = 'animation'
+                msg_info['mime_type'] = message.animation.mime_type
+                msg_info['width'] = message.animation.width
+        elif message.photo is not None:
+            if MEDIA_EXPORT['photos'] is True:
+                self.photo_num += 1
+                names = get_photo_name(
+                    message,
+                    self.username,
+                    self.photo_num
+                )
+                await get_photo_data(
+                    message,
+                    msg_info,
+                    names
+                )
+            else:
+                msg_info['photo'] = FILE_NOT_FOUND
+                msg_info['width'] = message.photo.width
+                msg_info['height'] = message.photo.height
+        elif message.video is not None:
+            if MEDIA_EXPORT['videos'] is True:
+                names = get_video_name(message, self.username)
+                await get_video_data(message, msg_info, names)
+            else:
+                msg_info['file'] = FILE_NOT_FOUND
+                msg_info['thumbnail'] = FILE_NOT_FOUND
+                msg_info['media_type'] = 'video_file'
+                msg_info['mime_type'] = message.video.mime_type
+                msg_info['duration_seconds'] = message.video.duration
+                msg_info['width'] = message.video.width
+        elif message.video_note is not None:
+            if MEDIA_EXPORT['video_messages'] is True:
+                self.video_message_num += 1
+                names = get_video_name(
+                    message,
+                    self.username,
+                    self.video_message_num
+                )
+                await get_video_note_data(
+                    message,
+                    msg_info,
+                    names
+                )
+            else:
+                msg_info['file'] = FILE_NOT_FOUND
+                msg_info['thumbnail'] = FILE_NOT_FOUND
+                msg_info['media_type'] = 'video_message'
+                msg_info['mime_type'] = message.video_note.mime_type
+                msg_info['duration_seconds'] = message.video_note.duration
+        elif message.audio is not None:
+            if MEDIA_EXPORT['audios'] is True:
+                names = get_audio_name(message, self.username)
+                await get_audio_data(message, msg_info, names)
+            else:
+                msg_info['file'] = FILE_NOT_FOUND
+                msg_info['thumbnail'] = FILE_NOT_FOUND
+                msg_info['media_type'] = 'audio_file'
+                msg_info['performer'] = message.audio.performer
+                msg_info['title'] = message.audio.title
+                msg_info['mime_type'] = message.audio.mime_type
+        elif message.voice is not None:
+            if MEDIA_EXPORT['voice_messages'] is True:
+                self.voice_num += 1
+                names = get_voice_name(
+                    message,
+                    self.username,
+                    self.voice_num
+                )
+                await get_voice_data(
+                    message,
+                    msg_info,
+                    names
+                )
+            else:
+                msg_info['file'] = FILE_NOT_FOUND
+        elif message.document is not None:
+            if MEDIA_EXPORT['documents'] is True:
+                names = get_document_name(message, self.username)
+                await get_document_data(
+                    message,
+                    msg_info,
+                    names
+                )
+            else:
+                msg_info['file'] = FILE_NOT_FOUND
+                msg_info['thumbnail'] = FILE_NOT_FOUND
+        elif message.contact is not None:
+            self.contact_num += 1
+            names = get_contact_name(
+                self.username,
+                self.contact_num
+            )
+            get_contact_data(
+                message,
+                msg_info,
+                names
+            )
+        elif message.location is not None:
+            msg_info['location_information'] = {
+                'latitude': message.location.latitude,
+                'longitude': message.location.longitude
+            }
+
+        if message.text is not None:
+            text = get_text_data(message, 'text')
+            if text:
+                text.append(message.text)
+                msg_info['text'] = text
+            else:
+                msg_info['text'] = message.text
+        elif message.caption is not None:
+            caption = get_text_data(message, 'caption')
+            if caption:
+                caption.append(message.caption)
+                msg_info['caption'] = caption
+            else:
+                msg_info['caption'] = message.caption
+        else:
+            msg_info['text'] = ''
+        self.messages.append(msg_info)
+        self.chat_data['messages'] = self.messages
 
 def generate_json_name(username: str, path: str = '') -> str:
     # TODO: add path when user want other path
@@ -346,7 +341,6 @@ async def get_animation_data(
                 message.animation.thumbs[0].file_id,
                 thumb_path
             )
-            msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['thumbnail'] = FILE_NOT_FOUND
@@ -551,65 +545,60 @@ def get_text_data(message: Message, text_mode: str) -> list:
         else:
             return text
 
-    # TODO: bug. remove entitiy part from all message
-    # TODO: use switch case
     for e in entities:
         txt = {}
-        if e.type == MessageEntityType.URL:
-            txt['type'] = 'link'
-        elif e.type == MessageEntityType.HASHTAG:
-            txt['type'] = 'hashtag'
-        elif e.type == MessageEntityType.CASHTAG:
-            txt['type'] = 'cashtag'
-        elif e.type == MessageEntityType.BOT_COMMAND:
-            txt['type'] = 'bot_command'
-        elif e.type == MessageEntityType.MENTION:
-            txt['type'] = 'mention'
-        elif e.type == MessageEntityType.EMAIL:
-            txt['type'] = 'email'
-        elif e.type == MessageEntityType.PHONE_NUMBER:
-            txt['type'] = 'phone_number'
-        elif e.type == MessageEntityType.BOLD:
-            txt['type'] = 'bold'
-        elif e.type == MessageEntityType.ITALIC:
-            txt['type'] = 'italic'
-        elif e.type == MessageEntityType.UNDERLINE:
-            txt['type'] = 'underline'
-        elif e.type == MessageEntityType.STRIKETHROUGH:
-            txt['type'] = 'strikethrough'
-        elif e.type == MessageEntityType.SPOILER:
-            txt['type'] = 'spoiler'
-        elif e.type == MessageEntityType.CODE:
-            # TODO: other parts??
-            txt['type'] = 'code'
-        elif e.type == MessageEntityType.PRE:
-            txt['type'] = 'pre'
-            txt['language'] = ''
-        elif e.type == MessageEntityType.BLOCKQUOTE:
-            # TODO: other parts??
-            txt['type'] = 'blockquote'
-        elif e.type == MessageEntityType.TEXT_LINK:
-            txt['type'] = 'text_link'
-            txt['href'] = e.url
-        elif e.type == MessageEntityType.TEXT_MENTION:
-            # TODO: other parts??
-            txt['type'] = 'text_mention'
-        elif e.type == MessageEntityType.BANK_CARD:
-            # TODO: other parts??
-            txt['type'] = 'bank_card'
-        # TODO: add other formats...
-        else:
-            # TODO: other parts??
-            txt['type'] = 'unknown'
+        match e.type:
+            case MessageEntityType.URL:
+                txt['type'] = 'link'
+            case MessageEntityType.HASHTAG:
+                txt['type'] = 'hashtag'
+            case MessageEntityType.CASHTAG:
+                txt['type'] = 'cashtag'
+            case MessageEntityType.BOT_COMMAND:
+                txt['type'] = 'bot_command'
+            case MessageEntityType.MENTION:
+                txt['type'] = 'mention'
+            case MessageEntityType.EMAIL:
+                txt['type'] = 'email'
+            case MessageEntityType.PHONE_NUMBER:
+                txt['type'] = 'phone_number'
+            case MessageEntityType.BOLD:
+                txt['type'] = 'bold'
+            case MessageEntityType.ITALIC:
+                txt['type'] = 'italic'
+            case MessageEntityType.UNDERLINE:
+                txt['type'] = 'underline'
+            case MessageEntityType.STRIKETHROUGH:
+                txt['type'] = 'strikethrough'
+            case MessageEntityType.SPOILER:
+                txt['type'] = 'spoiler'
+            case MessageEntityType.CODE:
+                txt['type'] = 'code'
+            case MessageEntityType.PRE:
+                txt['type'] = 'pre'
+                txt['language'] = ''
+            case MessageEntityType.BLOCKQUOTE:
+                txt['type'] = 'blockquote'
+            case MessageEntityType.TEXT_LINK:
+                txt['type'] = 'text_link'
+                txt['href'] = e.url
+            case MessageEntityType.TEXT_MENTION:
+                txt['type'] = 'text_mention'
+            case MessageEntityType.BANK_CARD:
+                txt['type'] = 'bank_card'
+            case MessageEntityType.CUSTOM_EMOJI:
+                txt['type'] = 'custom_emoji'
+            case _:
+                txt['type'] = 'unknown'
 
         if text_mode == 'text':
-            txt['text'] = message.text[e.offset:e.length]
+            txt['text'] = message.text[e.offset:e.offset + e.length]
         else:
-            txt['text'] = message.caption[e.offset:e.length]
+            txt['text'] = message.caption[e.offset:e.offset + e.length]
         text.append(txt)
     return text
 
-
+    
 # TODO: fix better typing
 def get_contact_data(
     message: Message,
@@ -617,32 +606,25 @@ def get_contact_data(
     names: tuple
 ) -> list:
     contact_data = {'phone_number': message.contact.phone_number}
-
-    if message.contact.first_name is not None:
-        contact_data['fist_name'] = message.contact.first_name
-    else:
-        contact_data['fist_name'] = ''
-
-    if message.contact.last_name is not None:
-        contact_data['last_name'] = message.contact.last_name
-    else:
-        contact_data['last_name'] = ''
-
+    contact_data['fist_name'] =  message.contact.first_name if message.contact.first_name is not None else ''
+    contact_data['last_name'] =  message.contact.last_name if message.contact.last_name is not None else ''
     msg_info['contact_information'] = contact_data
 
     if MEDIA_EXPORT['contacts'] is True:
         vcard_path, vcard_relative_path = names
         msg_info['contact_vcard'] = vcard_relative_path
 
-        # save vcard as file
-        vcard = message.contact.vcard
-        vcard = vcard.split('\n')
+        # convert to vcard
+        vcard = (
+            'BEGIN:VCARD\n'
+            'VERSION:3.0\n'
+            f'FN;CHARSET=UTF-8:{message.contact.first_name} {message.contact.last_name}\n'
+            f'N;CHARSET=UTF-8:{message.contact.last_name};{message.contact.first_name};;;\n'
+            f'TEL;TYPE=CELL:{message.contact.phone_number}\n'
+            'END:VCARD\n'
+        ) 
         with open(vcard_path, 'w') as f:
-            for i in vcard:
-                f.write(f'{i}\n')
-
-        # TODO: for all contacts
-        # TODO: convert to vcf
+            f.write(vcard)
     else:
         msg_info['contact_vcard'] = FILE_NOT_FOUND
 
@@ -902,7 +884,7 @@ def get_contact_name(
     path = ''
     media_dir = f'{chat_export_name}/contacts'
     os.makedirs(media_dir, exist_ok=True)
-    contact_name = f'contact_{media_num}.vcard'
+    contact_name = f'contact_{media_num}.vcf'
     contact_path = f'{media_dir}/{contact_name}'
     contact_relative_path = f'contacts/{contact_name}'
     return contact_path, contact_relative_path

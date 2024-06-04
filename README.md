@@ -13,31 +13,27 @@
     - [ ] private groups
 
 ### Export media in each chat
-You can choose to export and download each media type.
+You can choose to export and download each media type in `.env` file.
 ```
- MEDIA_EXPORT = {
-    'audios': False,
-    'videos': False,
-    'photos': False,
-    'stickers': False,
-    'animations': True,
-    'documents': False,
-    'voice_messages': False,
-    'video_messages': False,
-    'contacts': True
-}
+MEDIA_EXPORT_AUDIOS=false
+MEDIA_EXPORT_VIDEOS=false
+MEDIA_EXPORT_PHOTOS=true
+MEDIA_EXPORT_STICKERS=false
+MEDIA_EXPORT_ANIMATIONS=false
+MEDIA_EXPORT_DOCUMENTS=false
+MEDIA_EXPORT_VOICE_MESSAGES=false
+MEDIA_EXPORT_VIDEO_MESSAGES=false
+MEDIA_EXPORT_CONTACTS=false
 ```
 And also each chat.
 ```
-CHAT_EXPORT = {
-    'contacts': False,
-    'bot_chats': False,
-    'personal_chats': True,
-    'public_channels': False,
-    'public_groups': False,
-    'private_channels': False,
-    'private_groups': False,
-}
+CHAT_EXPORT_CONTACTS=False
+CHAT_EXPORT_BOT_CHATS=False
+CHAT_EXPORT_PERSONAL_CHATS=True
+CHAT_EXPORT_PUBLIC_CHANNELS=False
+CHAT_EXPORT_PUBLIC_GROUPS=False
+CHAT_EXPORT_PRIVATE_CHANNELS=False
+CHAT_EXPORT_PRIVATE_GROUPS=False
 ```
 
 ### Export assholes chat
