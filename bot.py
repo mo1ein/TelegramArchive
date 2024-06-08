@@ -11,44 +11,6 @@ from pyrogram.enums import ChatType, MessageEntityType
 from configs import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, CHAT_IDS, FILE_NOT_FOUND
 from chats import Chat
 
-app = Client(
-    "my_bot",
-    api_id=API_ID,
-    api_hash=API_HASH,
-)
-
-
-async def main():
-    async with app:
-
-        if not CHAT_IDS:
-            all_dialogs_id = await Chat(app).get_ids()
-            CHAT_IDS.extend(all_dialogs_id)
-
-        archive = Archive(CHAT_IDS)
-
-        for cid in CHAT_IDS:
-            # when use telegram api, channels id have -100 prefix
-            if type(cid) == int and not str(cid).startswith('-100'):
-                new_id = int(f'-100{cid}')
-                CHAT_IDS[CHAT_IDS.index(cid)] = new_id
-
-            chat = await app.get_chat(cid)
-            archive.fill_chat_data(chat)
-
-            # TODO: add exception for private channels
-            # read messages from first to last
-            all_messages = [m async for m in app.get_chat_history(cid)]
-            all_messages.reverse()
-            for message in all_messages:
-                # TODO: add initial message of channel
-                msg_info = {}
-                await archive.process_message(chat, message, msg_info)
-
-            json_name = generate_json_name(username=archive.username)
-            with open(json_name, mode='w') as f:
-                json.dump(archive.chat_data, f, indent=4, default=str)
-
 
 class Archive:
     def __init__(self, chat_ids: list = []):
@@ -899,5 +861,43 @@ def convert_to_unixtime(date: datetime):
 def to_html():
     pass
 
+
+async def main():
+    async with app:
+
+        if not CHAT_IDS:
+            all_dialogs_id = await Chat(app).get_ids()
+            CHAT_IDS.extend(all_dialogs_id)
+
+        archive = Archive(CHAT_IDS)
+
+        for cid in CHAT_IDS:
+            # when use telegram api, channels id have -100 prefix
+            if type(cid) == int and not str(cid).startswith('-100'):
+                new_id = int(f'-100{cid}')
+                CHAT_IDS[CHAT_IDS.index(cid)] = new_id
+
+            chat = await app.get_chat(cid)
+            archive.fill_chat_data(chat)
+
+            # TODO: add exception for private channels
+            # read messages from first to last
+            all_messages = [m async for m in app.get_chat_history(cid)]
+            all_messages.reverse()
+            for message in all_messages:
+                # TODO: add initial message of channel
+                msg_info = {}
+                await archive.process_message(chat, message, msg_info)
+
+            json_name = generate_json_name(username=archive.username)
+            with open(json_name, mode='w') as f:
+                json.dump(archive.chat_data, f, indent=4, default=str)
+
+
+app = Client(
+    "my_bot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+)
 
 app.run(main())
