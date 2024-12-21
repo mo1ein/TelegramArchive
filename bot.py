@@ -8,7 +8,7 @@ from typing import Union
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
-from configs import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, CHAT_IDS, FILE_NOT_FOUND
+from configs import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, CHAT_IDS, FILE_NOT_FOUND, MAX_FILE_SIZE
 from chats import Chat
 
 
@@ -862,6 +862,29 @@ def to_html():
     pass
 
 
+def split_json_file(data: dict, output_path: str, max_size: int = MAX_FILE_SIZE):
+    messages = data["messages"]
+    part_count = 1
+    current_data = {"messages": []}
+
+    for msg in messages:
+        current_data["messages"].append(msg)
+        serialized = json.dumps(current_data, default=str)
+        if len(serialized.encode('utf-8')) > max_size:
+            # Remove the last message that made it too big
+            current_data["messages"].pop()
+            # Save current part
+            with open(output_path.replace("result.json", f"result_part{part_count}.json"), "w") as outf:
+                json.dump(current_data, outf, indent=4, default=str)
+            # Start new part with the removed message
+            part_count += 1
+            current_data = {"messages": [msg]}
+
+    # Save last part
+    with open(output_path.replace("result.json", f"result_part{part_count}.json"), "w") as outf:
+        json.dump(current_data, outf, indent=4, default=str)
+
+
 async def main():
     async with app:
 
@@ -890,8 +913,11 @@ async def main():
                 await archive.process_message(chat, message, msg_info)
 
             json_name = generate_json_name(username=archive.username)
-            with open(json_name, mode='w') as f:
-                json.dump(archive.chat_data, f, indent=4, default=str)
+            if MAX_FILE_SIZE <= 0:
+                with open(json_name, mode='w') as f:
+                    json.dump(archive.chat_data, f, indent=4, default=str)
+            else:
+                split_json_file(archive.chat_data, json_name, MAX_FILE_SIZE)
 
 
 app = Client(
