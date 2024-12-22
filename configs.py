@@ -36,7 +36,7 @@ CHAT_EXPORT = {
 }
 
 # Negative value means no splitting
-MAX_FILE_SIZE = int(env.get("MAX_FILE_SIZE"))
+JSON_FILE_PAGE_SIZE = int(env.get("JSON_FILE_PAGE_SIZE"))
 
 FILE_NOT_FOUND = '(File not included. Change data exporting settings to download.)'
 

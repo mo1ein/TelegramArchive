@@ -862,7 +862,7 @@ def to_html():
     pass
 
 
-def split_json_file(data: dict, output_path: str, max_size: int = MAX_FILE_SIZE):
+def split_json_file(data: dict, output_path: str, max_size: int = JSON_FILE_PAGE_SIZE):
     messages = data["messages"]
     part_count = 1
     current_data = {"messages": []}
@@ -913,11 +913,11 @@ async def main():
                 await archive.process_message(chat, message, msg_info)
 
             json_name = generate_json_name(username=archive.username)
-            if MAX_FILE_SIZE <= 0:
+            if JSON_FILE_PAGE_SIZE <= 0:
                 with open(json_name, mode='w') as f:
                     json.dump(archive.chat_data, f, indent=4, default=str)
             else:
-                split_json_file(archive.chat_data, json_name, MAX_FILE_SIZE)
+                split_json_file(archive.chat_data, json_name, JSON_FILE_PAGE_SIZE)
 
 
 app = Client(
