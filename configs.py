@@ -36,7 +36,7 @@ CHAT_EXPORT = {
 }
 
 # Negative value means no splitting
-JSON_FILE_PAGE_SIZE = int(env.get("JSON_FILE_PAGE_SIZE"))
+JSON_FILE_PAGE_SIZE = None if env.get('JSON_FILE_PAGE_SIZE') == '' else int(env.get('JSON_FILE_PAGE_SIZE'))
 
 FILE_NOT_FOUND = '(File not included. Change data exporting settings to download.)'
 
