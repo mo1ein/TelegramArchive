@@ -44,4 +44,4 @@ CHAT_EXPORT_PRIVATE_GROUPS=False
 - [ ] html
 
 ## Contribute
-##### That's very enjoyable for me if you contribute. You can fix `TODO`'s or any problem, bug and tasks in `README`.
+Read [CONTRIBUTING.md](CONTRIBUTING.md).
