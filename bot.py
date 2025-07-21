@@ -7,7 +7,7 @@ import uuid
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
-from config import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, FILE_NOT_FOUND
+from configs import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, FILE_NOT_FOUND
 from chats import Chat
 
 app = Client(
@@ -48,34 +48,40 @@ async def main():
             chat_data = {}
             # just export all contacts
             # for example all channels, all groups, ...
-            if chat.type == ChatType.PRIVATE:
-                username = chat.username
-                # TODO: lastname
-                chat_data['name'] = chat.first_name
-                chat_data['type'] = 'personal_chat'
-                chat_data['id'] = chat.id
-                print(username)
-            elif chat.type == ChatType.CHANNEL:
-                username = chat.username
-                chat_data['name'] = chat.title
-                chat_data['type'] = 'public_channel'
-                # when using telegram api ids have -100 prefix
-                # https://stackoverflow.com/questions/33858927/how-to-obtain-the-chat-id-of-a-private-telegram-channel
-                chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
-            elif chat.type == ChatType.GROUP:
-                username = chat.username
-                chat_data['name'] = chat.title
-                chat_data['type'] = 'public_group'
-                chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
-            elif chat.type == ChatType.SUPERGROUP:
-                username = chat.username
-                chat_data['name'] = chat.title
-                chat_data['type'] = 'public_supergroup'
-                chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
-            # TODO: private SUPERGROUP and GROUP
-            else:
-                # bot? other chat types
-                pass
+            match chat.type: 
+                case ChatType.PRIVATE:
+                # if chat.type == ChatType.PRIVATE:
+                    username = chat.username
+                    # TODO: lastname
+                    chat_data['name'] = chat.first_name
+                    chat_data['type'] = 'personal_chat'
+                    chat_data['id'] = chat.id
+                    print(username)
+                case ChatType.CHANNEL:
+                # elif chat.type == ChatType.CHANNEL:
+                    username = chat.username
+                    chat_data['name'] = chat.title
+                    chat_data['type'] = 'public_channel'
+                    # when using telegram api ids have -100 prefix
+                    # https://stackoverflow.com/questions/33858927/how-to-obtain-the-chat-id-of-a-private-telegram-channel
+                    chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
+                case ChatType.GROUP:
+                # elif chat.type == ChatType.GROUP:
+                    username = chat.username
+                    chat_data['name'] = chat.title
+                    chat_data['type'] = 'public_group'
+                    chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
+                case ChatType.SUPERGROUP:
+                # elif chat.type == ChatType.SUPERGROUP:
+                    username = chat.username
+                    chat_data['name'] = chat.title
+                    chat_data['type'] = 'public_supergroup'
+                    chat_data['id'] = str(chat.id)[4::] if str(chat.id).startswith('-100') else chat.id
+                # TODO: private SUPERGROUP and GROUP
+                case _:
+                # else:
+                    # bot? other chat types
+                    pass
 
             # TODO: add exception for private channels
             # read messages from first to last

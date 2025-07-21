@@ -1,6 +1,6 @@
 from pyrogram import Client
 from pyrogram.enums import ChatType
-from config import CHAT_EXPORT
+from configs import CHAT_EXPORT
 
 
 class Chat:
