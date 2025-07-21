@@ -43,5 +43,19 @@ CHAT_EXPORT_PRIVATE_GROUPS=False
 - [x] json
 - [ ] html
 
+## Run
+You can easily run project with make and docker.
+```shell
+make env
+# change your env vars then
+make up
+```
+
+### Run manually
+```shell
+make build-manual
+make run
+```
+
 ## Contribute
 Read [CONTRIBUTING.md](CONTRIBUTING.md).

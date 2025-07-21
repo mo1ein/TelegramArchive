@@ -12,7 +12,9 @@ from chats import Chat
 
 
 class Archive:
-    def __init__(self, chat_ids: list = []):
+    def __init__(self, chat_ids=None):
+        if chat_ids is None:
+            chat_ids = []
         self.chat_ids = chat_ids
         self.voice_num = 0
         self.photo_num = 0
@@ -55,6 +57,7 @@ class Archive:
         msg_info['type'] = 'message'
         msg_info['date'] = message.date.strftime('%Y-%m-%dT%H:%M:%S')
         msg_info['date_unixtime'] = convert_to_unixtime(message.date)
+        print(message)
 
         # set chat name
         # this part is so shitty fix THIS
