@@ -1,1 +1,2 @@
 pyrogram
+python-dotenv
