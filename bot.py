@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 import uuid
 
+from tqdm import tqdm
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
@@ -57,7 +58,6 @@ class Archive:
         msg_info['type'] = 'message'
         msg_info['date'] = message.date.strftime('%Y-%m-%dT%H:%M:%S')
         msg_info['date_unixtime'] = convert_to_unixtime(message.date)
-        print(message)
 
         # set chat name
         # this part is so shitty fix THIS
@@ -909,7 +909,8 @@ async def main():
             # read messages from first to last
             all_messages = [m async for m in app.get_chat_history(cid)]
             all_messages.reverse()
-            for message in all_messages:
+            # Wrap the message processing with tqdm to show progress
+            for message in tqdm(all_messages, desc=f"Processing messages for {chat.username}", unit="message"):
                 # TODO: add initial message of channel
                 msg_info = {}
                 await archive.process_message(chat, message, msg_info)
