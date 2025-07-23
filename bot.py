@@ -1,19 +1,24 @@
+import logging
 import os
 import json
+import sys
 import time
 from datetime import datetime
 import uuid
 
-from tqdm import tqdm
+from tqdm_loggable.auto import tqdm
+from tqdm_loggable.tqdm_logging import tqdm_logging
 from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
-from configs import API_ID, API_HASH, MEDIA_EXPORT, CHAT_EXPORT, CHAT_IDS, FILE_NOT_FOUND, JSON_FILE_PAGE_SIZE
+from configs import API_ID, API_HASH, MEDIA_EXPORT, CHAT_IDS, FILE_NOT_FOUND, JSON_FILE_PAGE_SIZE, DOWNLOAD_PATH
 from chats import Chat
+
+logger = logging.getLogger(__name__)
 
 
 class Archive:
-    def __init__(self, chat_ids=None):
+    def __init__(self, chat_ids=None) -> None:
         if chat_ids is None:
             chat_ids = []
         self.chat_ids = chat_ids
@@ -52,7 +57,7 @@ class Archive:
                 # bot? other chat types
                 pass
 
-    async def process_message(self, chat, message, msg_info: dict) -> None:
+    async def process_message(self, chat, message, msg_info: dict, pbar: tqdm) -> None:
         # TODO: move msg_info filling to other function
         msg_info['id'] = message.id
         msg_info['type'] = 'message'
@@ -97,7 +102,7 @@ class Archive:
                     message,
                     self.username
                 )
-                await get_sticker_data(message, msg_info, names)
+                await get_sticker_data(message, msg_info, names, pbar)
             else:
                 msg_info['file'] = FILE_NOT_FOUND
                 msg_info['thumbnail'] = FILE_NOT_FOUND
@@ -108,11 +113,7 @@ class Archive:
         elif message.animation is not None:
             if MEDIA_EXPORT['animations'] is True:
                 names = get_animation_name(message, self.username)
-                await get_animation_data(
-                    message,
-                    msg_info,
-                    names
-                )
+                await get_animation_data(message, msg_info, names, pbar)
             else:
                 msg_info['file'] = FILE_NOT_FOUND
                 msg_info['thumbnail'] = FILE_NOT_FOUND
@@ -127,11 +128,7 @@ class Archive:
                     self.username,
                     self.photo_num
                 )
-                await get_photo_data(
-                    message,
-                    msg_info,
-                    names
-                )
+                await get_photo_data(message, msg_info, names, pbar)
             else:
                 msg_info['photo'] = FILE_NOT_FOUND
                 msg_info['width'] = message.photo.width
@@ -139,7 +136,7 @@ class Archive:
         elif message.video is not None:
             if MEDIA_EXPORT['videos'] is True:
                 names = get_video_name(message, self.username)
-                await get_video_data(message, msg_info, names)
+                await get_video_data(message, msg_info, names, pbar)
             else:
                 msg_info['file'] = FILE_NOT_FOUND
                 msg_info['thumbnail'] = FILE_NOT_FOUND
@@ -158,7 +155,8 @@ class Archive:
                 await get_video_note_data(
                     message,
                     msg_info,
-                    names
+                    names,
+                    pbar
                 )
             else:
                 msg_info['file'] = FILE_NOT_FOUND
@@ -169,7 +167,7 @@ class Archive:
         elif message.audio is not None:
             if MEDIA_EXPORT['audios'] is True:
                 names = get_audio_name(message, self.username)
-                await get_audio_data(message, msg_info, names)
+                await get_audio_data(message, msg_info, names, pbar)
             else:
                 msg_info['file'] = FILE_NOT_FOUND
                 msg_info['thumbnail'] = FILE_NOT_FOUND
@@ -188,7 +186,8 @@ class Archive:
                 await get_voice_data(
                     message,
                     msg_info,
-                    names
+                    names,
+                    pbar
                 )
             else:
                 msg_info['file'] = FILE_NOT_FOUND
@@ -198,7 +197,8 @@ class Archive:
                 await get_document_data(
                     message,
                     msg_info,
-                    names
+                    names,
+                    pbar
                 )
             else:
                 msg_info['file'] = FILE_NOT_FOUND
@@ -212,7 +212,8 @@ class Archive:
             get_contact_data(
                 message,
                 msg_info,
-                names
+                names,
+                pbar
             )
         elif message.location is not None:
             msg_info['location_information'] = {
@@ -239,41 +240,45 @@ class Archive:
         self.messages.append(msg_info)
         self.chat_data['messages'] = self.messages
 
+
 def generate_json_name(username: str, path: str = '') -> str:
     # TODO: add path when user want other path
     chat_export_date = datetime.now().strftime("%Y-%m-%d")
-    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    chat_export_name = f'{DOWNLOAD_PATH}/ChatExport_{username}_{chat_export_date}'
     json_name = f'{chat_export_name}/result.json'
     os.makedirs(chat_export_name, exist_ok=True)
     return json_name
 
 
 async def get_sticker_data(
-    message: Message,
-    msg_info: dict,
-    names: tuple
+        message: Message,
+        msg_info: dict,
+        names: tuple,
+        pbar: tqdm
 ) -> None:
     sticker_path, thumb_path, sticker_relative_path, thumb_relative_path = names
+    file_name = os.path.basename(sticker_path)
+    pbar.set_postfix(file=file_name)
     try:
-        await app.download_media(
-            message.sticker.file_id,
-            sticker_path
-        )
+        await app.download_media(message.sticker.file_id, sticker_path)
         msg_info['file'] = sticker_relative_path
     except ValueError:
         print("Oops can't download media!")
         msg_info['file'] = FILE_NOT_FOUND
+    finally:
+        pbar.set_postfix(file=None)
 
     if message.sticker.thumbs is not None:
+        thumb_file_name = os.path.basename(thumb_path)
+        pbar.set_postfix(file=thumb_file_name)
         try:
-            await app.download_media(
-                message.sticker.thumbs[0].file_id,
-                thumb_path
-            )
+            await app.download_media(message.sticker.thumbs[0].file_id, thumb_path)
             msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['thumbnail'] = FILE_NOT_FOUND
+        finally:
+            pbar.set_postfix(file=None)
     else:
         msg_info['thumbnail'] = FILE_NOT_FOUND
 
@@ -282,32 +287,35 @@ async def get_sticker_data(
     msg_info['width'] = message.sticker.width
     msg_info['height'] = message.sticker.height
 
-
 async def get_animation_data(
-    message: Message,
-    msg_info: dict,
-    names: tuple
+        message: Message,
+        msg_info: dict,
+        names: tuple,
+        pbar: tqdm
 ) -> None:
     animation_path, thumb_path, animation_relative_path, thumb_relative_path = names
+    file_name = os.path.basename(animation_path)
+    pbar.set_postfix(file=file_name)
     try:
-        await app.download_media(
-            message.animation.file_id,
-            animation_path
-        )
+        await app.download_media(message.animation.file_id, animation_path)
         msg_info['file'] = animation_relative_path
     except ValueError:
         print("Oops can't download media!")
         msg_info['file'] = FILE_NOT_FOUND
+    finally:
+        pbar.set_postfix(file=None)
 
     if message.animation.thumbs is not None:
+        thumb_file_name = os.path.basename(thumb_path)
+        pbar.set_postfix(file=thumb_file_name)
         try:
-            await app.download_media(
-                message.animation.thumbs[0].file_id,
-                thumb_path
-            )
+            await app.download_media(message.animation.thumbs[0].file_id, thumb_path)
+            msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['thumbnail'] = FILE_NOT_FOUND
+        finally:
+            pbar.set_postfix(file=None)
     else:
         msg_info['thumbnail'] = FILE_NOT_FOUND
 
@@ -316,53 +324,57 @@ async def get_animation_data(
     msg_info['width'] = message.animation.width
     msg_info['height'] = message.animation.height
 
-
 async def get_photo_data(
-    message: Message,
-    msg_info: dict,
-    names: tuple
+        message: Message,
+        msg_info: dict,
+        names: tuple,
+        pbar: tqdm
 ):
     photo_path, photo_relative_path = names
+    file_name = os.path.basename(photo_path)
+    pbar.set_postfix(file=file_name)
     try:
-        await app.download_media(
-            message.photo.file_id,
-            photo_path
-        )
+        await app.download_media(message.photo.file_id, photo_path)
         msg_info['photo'] = photo_relative_path
     except ValueError:
         print("Oops can't download media!")
         msg_info['photo'] = FILE_NOT_FOUND
+    finally:
+        pbar.set_postfix(file=None)
 
     msg_info['width'] = message.photo.width
     msg_info['height'] = message.photo.height
 
 
 async def get_video_data(
-    message: Message,
-    msg_info: dict,
-    names: tuple
+        message: Message,
+        msg_info: dict,
+        names: tuple,
+        pbar: tqdm
 ) -> None:
     video_path, thumb_path, video_relative_path, thumb_relative_path = names
+    file_name = os.path.basename(video_path)
+    pbar.set_postfix(file=file_name)
     try:
-        await app.download_media(
-            message.video.file_id,
-            video_path
-        )
+        await app.download_media(message.video.file_id, video_path)
         msg_info['file'] = video_relative_path
     except ValueError:
         print("Oops can't download media!")
         msg_info['file'] = FILE_NOT_FOUND
+    finally:
+        pbar.set_postfix(file=None)
 
     if message.video.thumbs is not None:
+        thumb_file_name = os.path.basename(thumb_path)
+        pbar.set_postfix(file=thumb_file_name)
         try:
-            await app.download_media(
-                message.video.thumbs[0].file_id,
-                thumb_path
-            )
+            await app.download_media(message.video.thumbs[0].file_id, thumb_path)
             msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['thumbnail'] = FILE_NOT_FOUND
+        finally:
+            pbar.set_postfix(file=None)
     else:
         msg_info['thumbnail'] = FILE_NOT_FOUND
 
@@ -376,29 +388,32 @@ async def get_video_data(
 async def get_video_note_data(
     message: Message,
     msg_info: dict,
-    names: tuple
+    names: tuple,
+    pbar: tqdm
 ):
     vnote_path, thumb_path, vnote_relative_path, thumb_relative_path = names
+    file_name = os.path.basename(vnote_path)
+    pbar.set_postfix(file=file_name)
     try:
-        await app.download_media(
-            message.video_note.file_id,
-            vnote_path
-        )
+        await app.download_media(message.video_note.file_id, vnote_path)
         msg_info['file'] = vnote_relative_path
     except ValueError:
         print("Oops can't download media!")
         msg_info['file'] = FILE_NOT_FOUND
+    finally:
+        pbar.set_postfix(file=None)
 
     if message.video_note.thumbs is not None:
+        thumb_file_name = os.path.basename(thumb_path)
+        pbar.set_postfix(file=thumb_file_name)
         try:
-            await app.download_media(
-                message.video_note.thumbs[0].file_id,
-                thumb_path
-            )
+            await app.download_media(message.video_note.thumbs[0].file_id, thumb_path)
             msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['thumbnail'] = FILE_NOT_FOUND
+        finally:
+            pbar.set_postfix(file=None)
     else:
         msg_info['thumbnail'] = FILE_NOT_FOUND
 
@@ -406,33 +421,35 @@ async def get_video_note_data(
     msg_info['mime_type'] = message.video_note.mime_type
     msg_info['duration_seconds'] = message.video_note.duration
 
-
 async def get_audio_data(
     message: Message,
     msg_info: dict,
-    names: tuple
+    names: tuple,
+    pbar: tqdm
 ) -> None:
     audio_path, thumb_path, audio_relative_path, thumb_relative_path = names
+    file_name = os.path.basename(audio_path)
+    pbar.set_postfix(file=file_name)
     try:
-        await app.download_media(
-            message.audio.file_id,
-            audio_path
-        )
+        await app.download_media(message.audio.file_id, audio_path)
         msg_info['file'] = audio_relative_path
     except ValueError:
         print("Oops can't download media!")
         msg_info['file'] = FILE_NOT_FOUND
+    finally:
+        pbar.set_postfix(file=None)
 
     if message.audio.thumbs is not None:
+        thumb_file_name = os.path.basename(thumb_path)
+        pbar.set_postfix(file=thumb_file_name)
         try:
-            await app.download_media(
-                message.audio.thumbs[0].file_id,
-                thumb_path
-            )
+            await app.download_media(message.audio.thumbs[0].file_id, thumb_path)
             msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['thumbnail'] = FILE_NOT_FOUND
+        finally:
+            pbar.set_postfix(file=None)
     else:
         msg_info['thumbnail'] = FILE_NOT_FOUND
 
@@ -446,55 +463,58 @@ async def get_audio_data(
 async def get_voice_data(
     message: Message,
     msg_info: dict,
-    names: tuple
+    names: tuple,
+    pbar: tqdm
 ) -> None:
     voice_path, voice_relative_path = names
+    file_name = os.path.basename(voice_path)
+    pbar.set_postfix(file=file_name)
     try:
-        await app.download_media(
-            message.voice.file_id,
-            voice_path
-        )
+        await app.download_media(message.voice.file_id, voice_path)
         msg_info['file'] = voice_relative_path
     except ValueError:
         print("Oops can't download media!")
         msg_info['file'] = FILE_NOT_FOUND
+    finally:
+        pbar.set_postfix(file=None)
 
     msg_info['media_type'] = 'voice_message'
     msg_info['mime_type'] = message.voice.mime_type
     msg_info['duration_seconds'] = message.voice.duration
 
-
 async def get_document_data(
-    message: Message,
-    msg_info: dict,
-    names: tuple
+        message: Message,
+        msg_info: dict,
+        names: tuple,
+        pbar: tqdm
 ) -> None:
     doc_path, thumb_path, doc_relative_path, thumb_relative_path = names
+    file_name = os.path.basename(doc_path)
+    pbar.set_postfix(file=file_name)
     try:
-        await app.download_media(
-            message.document.file_id,
-            doc_path
-        )
+        await app.download_media(message.document.file_id, doc_path)
         msg_info['file'] = doc_relative_path
     except ValueError:
         print("Oops can't download media!")
         msg_info['file'] = FILE_NOT_FOUND
+    finally:
+        pbar.set_postfix(file=None)
 
     if message.document.thumbs is not None:
+        thumb_file_name = os.path.basename(thumb_path)
+        pbar.set_postfix(file=thumb_file_name)
         try:
-            await app.download_media(
-                message.document.thumbs[0].file_id,
-                thumb_path
-            )
+            await app.download_media(message.document.thumbs[0].file_id, thumb_path)
             msg_info['thumbnail'] = thumb_relative_path
         except ValueError:
             print("Oops can't download media!")
             msg_info['thumbnail'] = FILE_NOT_FOUND
+        finally:
+            pbar.set_postfix(file=None)
     else:
         msg_info['thumbnail'] = FILE_NOT_FOUND
 
     msg_info['mime_type'] = message.document.mime_type
-
 
 def get_text_data(message: Message, text_mode: str) -> list:
     text = []
@@ -565,13 +585,13 @@ def get_text_data(message: Message, text_mode: str) -> list:
 
 # TODO: fix better typing
 def get_contact_data(
-    message: Message,
-    msg_info: dict,
-    names: tuple
+        message: Message,
+        msg_info: dict,
+        names: tuple
 ) -> list:
     contact_data = {'phone_number': message.contact.phone_number}
-    contact_data['fist_name'] =  message.contact.first_name if message.contact.first_name is not None else ''
-    contact_data['last_name'] =  message.contact.last_name if message.contact.last_name is not None else ''
+    contact_data['fist_name'] = message.contact.first_name if message.contact.first_name is not None else ''
+    contact_data['last_name'] = message.contact.last_name if message.contact.last_name is not None else ''
     msg_info['contact_information'] = contact_data
 
     if MEDIA_EXPORT['contacts'] is True:
@@ -594,12 +614,12 @@ def get_contact_data(
 
 
 def get_photo_name(
-    message: Message,
-    username: str,
-    media_num: int = None
+        message: Message,
+        username: str,
+        media_num: int = None
 ) -> tuple:
     chat_export_date = datetime.now().strftime("%Y-%m-%d")
-    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    chat_export_name = f'{DOWNLOAD_PATH}/ChatExport_{username}_{chat_export_date}'
     # TODO: when user want other path
     path = ''
     media_dir = f'{chat_export_name}/photos'
@@ -616,12 +636,12 @@ def get_photo_name(
 
 
 def get_video_name(
-    message: Message,
-    username: str,
-    media_num: int = None
+        message: Message,
+        username: str,
+        media_num: int = None
 ) -> tuple:
     chat_export_date = datetime.now().strftime("%Y-%m-%d")
-    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    chat_export_name = f'{DOWNLOAD_PATH}/ChatExport_{username}_{chat_export_date}'
     # TODO: when user want other path
     path = ''
     media_dir = f'{chat_export_name}/video_files'
@@ -651,12 +671,12 @@ def get_video_name(
 
 
 def get_voice_name(
-    message: Message,
-    username: str,
-    media_num: int = None
+        message: Message,
+        username: str,
+        media_num: int = None
 ) -> tuple:
     chat_export_date = datetime.now().strftime("%Y-%m-%d")
-    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    chat_export_name = f'{DOWNLOAD_PATH}/ChatExport_{username}_{chat_export_date}'
     # TODO: when user want other path
     path = ''
 
@@ -673,12 +693,12 @@ def get_voice_name(
 
 
 def get_video_note_name(
-    message: Message,
-    username: str,
-    media_num: int = None
+        message: Message,
+        username: str,
+        media_num: int = None
 ) -> tuple:
     chat_export_date = datetime.now().strftime("%Y-%m-%d")
-    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    chat_export_name = f'{DOWNLOAD_PATH}/ChatExport_{username}_{chat_export_date}'
     # TODO: when user want other path
     path = ''
     media_dir = f'{chat_export_name}/round_video_messages'
@@ -709,12 +729,12 @@ def get_video_note_name(
 
 
 def get_sticker_name(
-    message: Message,
-    username: str,
-    media_num: int = None
+        message: Message,
+        username: str,
+        media_num: int = None
 ) -> tuple:
     chat_export_date = datetime.now().strftime("%Y-%m-%d")
-    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    chat_export_name = f'{DOWNLOAD_PATH}/ChatExport_{username}_{chat_export_date}'
     # TODO: when user want other path
     path = ''
     media_dir = f'{chat_export_name}/stickers'
@@ -743,12 +763,12 @@ def get_sticker_name(
 
 
 def get_animation_name(
-    message: Message,
-    username: str,
-    media_num: int = None
+        message: Message,
+        username: str,
+        media_num: int = None
 ) -> tuple:
     chat_export_date = datetime.now().strftime("%Y-%m-%d")
-    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    chat_export_name = f'{DOWNLOAD_PATH}/ChatExport_{username}_{chat_export_date}'
     # TODO: when user want other path
     path = ''
     media_dir = f'{chat_export_name}/video_files'
@@ -777,12 +797,12 @@ def get_animation_name(
 
 
 def get_audio_name(
-    message: Message,
-    username: str,
-    media_num: int = None
+        message: Message,
+        username: str,
+        media_num: int = None
 ) -> tuple:
     chat_export_date = datetime.now().strftime("%Y-%m-%d")
-    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    chat_export_name = f'{DOWNLOAD_PATH}/ChatExport_{username}_{chat_export_date}'
     # TODO: when user want other path
     path = ''
 
@@ -808,12 +828,12 @@ def get_audio_name(
 
 
 def get_document_name(
-    message: Message,
-    username: str,
-    media_num: int = None
+        message: Message,
+        username: str,
+        media_num: int = None
 ) -> tuple:
     chat_export_date = datetime.now().strftime("%Y-%m-%d")
-    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    chat_export_name = f'{DOWNLOAD_PATH}/ChatExport_{username}_{chat_export_date}'
     # TODO: when user want other path
     path = ''
 
@@ -839,11 +859,11 @@ def get_document_name(
 
 
 def get_contact_name(
-    username: str,
-    media_num: int,
+        username: str,
+        media_num: int,
 ) -> tuple:
     chat_export_date = datetime.now().strftime("%Y-%m-%d")
-    chat_export_name = f'ChatExport_{username}_{chat_export_date}'
+    chat_export_name = f'{DOWNLOAD_PATH}/ChatExport_{username}_{chat_export_date}'
     # TODO: when user want other path
     path = ''
     media_dir = f'{chat_export_name}/contacts'
@@ -888,7 +908,20 @@ def split_json_file(data: dict, output_path: str, page_size: int = JSON_FILE_PAG
 
 
 async def main():
+    fmt = f"%(message)s"
+    logging.basicConfig(level=logging.INFO, format=fmt)
+
+    # Mute other libraries (like Telethon, HTTPX, etc.)
+    logging.getLogger("telethon").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("pyrogram").setLevel(logging.WARNING)
+
+    # Set the rate how often we update logs
+    # Defaults to 10 seconds - optional
+    # tqdm_logging.set_log_rate(datetime.timedelta(seconds=1))
+
     async with app:
+        print("\033[32mStarting...\033[0m")
 
         if not CHAT_IDS:
             all_dialogs_id = await Chat(app).get_ids()
@@ -910,10 +943,11 @@ async def main():
             all_messages = [m async for m in app.get_chat_history(cid)]
             all_messages.reverse()
             # Wrap the message processing with tqdm to show progress
-            for message in tqdm(all_messages, desc=f"Processing messages for {chat.username}", unit="message"):
+            pbar = tqdm(all_messages, desc=f"Processing messages for @{chat.username}", unit="message")
+            for message in pbar:
                 # TODO: add initial message of channel
                 msg_info = {}
-                await archive.process_message(chat, message, msg_info)
+                await archive.process_message(chat, message, msg_info, pbar)
 
             json_name = generate_json_name(username=archive.username)
             if not JSON_FILE_PAGE_SIZE:
