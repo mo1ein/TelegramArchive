@@ -2,7 +2,14 @@ version: "3.9"
 
 services:
   bot:
+    container_name: telegram_archive_bot
     build: .
+    # host networking (ok for VPN/proxy use‑cases, just be aware of the security implications)
+    network_mode: "host"
     env_file:
       - .env
+    environment:
+      - DOWNLOAD_PATH=/app/data  # Force container path
+    volumes:
+      - "${HOST_DOWNLOAD_PATH}:/app/data"
     restart: unless-stopped

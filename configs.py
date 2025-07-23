@@ -13,6 +13,9 @@ API_HASH = os.environ.get("API_HASH")
 
 CHAT_IDS = json.loads(os.environ.get("CHAT_IDS", "[]"))
 
+# todo: check if this path exist? or not and go to failed and panic
+DOWNLOAD_PATH = os.environ.get("DOWNLOAD_PATH")
+
 MEDIA_EXPORT = {
     'audios': str_to_bool(os.environ.get("MEDIA_EXPORT_AUDIOS")),
     'videos': str_to_bool(os.environ.get("MEDIA_EXPORT_VIDEOS")),
