@@ -12,7 +12,7 @@ from pyrogram import Client
 from pyrogram.types import Message
 from pyrogram.enums import ChatType, MessageEntityType
 from configs import API_ID, API_HASH, MEDIA_EXPORT, CHAT_IDS, FILE_NOT_FOUND, JSON_FILE_PAGE_SIZE, DOWNLOAD_PATH
-from chats import Chat
+from chats import ChatExporter
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class Archive:
         self.messages = []
         self.chat_data = {}
 
-    def fill_chat_data(self, chat: Chat) -> None:
+    def fill_chat_data(self, chat: ChatExporter) -> None:
         self.username = chat.username
         match chat.type:
             case ChatType.PRIVATE:
@@ -924,7 +924,7 @@ async def main():
         print("\033[32mStarting...\033[0m")
 
         if not CHAT_IDS:
-            all_dialogs_id = await Chat(app).get_ids()
+            all_dialogs_id = await ChatExporter(app).get_ids()
             CHAT_IDS.extend(all_dialogs_id)
 
         archive = Archive(CHAT_IDS)
@@ -943,7 +943,7 @@ async def main():
             all_messages = [m async for m in app.get_chat_history(cid)]
             all_messages.reverse()
             # Wrap the message processing with tqdm to show progress
-            pbar = tqdm(all_messages, desc=f"Processing messages for @{chat.username}", unit="message")
+            pbar = tqdm(all_messages, desc=f"Processing messages for @{chat.username or chat.title or chat.id}", unit="message")
             for message in pbar:
                 # TODO: add initial message of channel
                 msg_info = {}

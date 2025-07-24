@@ -29,13 +29,12 @@ MEDIA_EXPORT = {
 }
 
 CHAT_EXPORT = {
-    'contacts': str_to_bool(os.environ.get("CHAT_EXPORT_CONTACTS")),
-    'bot_chats': str_to_bool(os.environ.get("CHAT_EXPORT_BOT_CHATS")),
-    'personal_chats': str_to_bool(os.environ.get("CHAT_EXPORT_PERSONAL_CHATS")),
-    'public_channels': str_to_bool(os.environ.get("CHAT_EXPORT_PUBLIC_CHANNELS")),
-    'public_groups': str_to_bool(os.environ.get("CHAT_EXPORT_PUBLIC_GROUPS")),
-    'private_channels': str_to_bool(os.environ.get("CHAT_EXPORT_PRIVATE_CHANNELS")),
-    'private_groups': str_to_bool(os.environ.get("CHAT_EXPORT_PRIVATE_GROUPS")),
+    'contacts': str_to_bool(os.environ.get("CHAT_EXPORT_CONTACTS")), # TODO
+    'bot': str_to_bool(os.environ.get("CHAT_EXPORT_BOTS")),
+    'personal': str_to_bool(os.environ.get("CHAT_EXPORT_PERSONALS")),
+    'channel': str_to_bool(os.environ.get("CHAT_EXPORT_CHANNELS")),
+    'group': str_to_bool(os.environ.get("CHAT_EXPORT_GROUPS")),
+    'super_group': str_to_bool(os.environ.get("CHAT_EXPORT_SUPER_GROUPS")),
 }
 
 page_size = os.environ.get('JSON_FILE_PAGE_SIZE', '')
