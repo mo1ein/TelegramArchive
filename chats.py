@@ -30,7 +30,7 @@ class ChatExporter:
 			should_export: bool = self._export_map.get(chat.type, False)
 			print(
 				f"Dialog: id={chat.id}, "
-				f"title={getattr(chat, "title", None) or getattr(chat, "first_name", None)}, "
+				f"title={getattr(chat, 'title', None) or getattr(chat, 'first_name', None)}, "
 				f"type={chat.type.name}, export={should_export}"
 			)
 			if should_export:
