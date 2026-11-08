@@ -33,8 +33,16 @@ func newMetadataWriter(dir string, chat Chat) (*metadataWriter, error) {
 }
 
 func (w *metadataWriter) append(m Message) error {
+	b, err := messageMetadata(m)
+	if err != nil {
+		return err
+	}
+	return w.appendRaw(b)
+}
+
+func messageMetadata(m Message) ([]byte, error) {
 	if m.ActionData == nil && m.ExtraMedia == nil && m.Poll == nil && len(m.CustomEmojiFiles) == 0 && m.ExportScope == "" && m.TopicID == 0 && m.PhotoSkipReason == "" && m.FileSkipReason == "" && m.ThumbnailSkipReason == "" {
-		return nil
+		return nil, nil
 	}
 	row := struct {
 		ID              int               `json:"id"`
@@ -48,16 +56,19 @@ func (w *metadataWriter) append(m Message) error {
 		FileReason      string            `json:"file_skip_reason,omitempty"`
 		ThumbnailReason string            `json:"thumbnail_skip_reason,omitempty"`
 	}{m.ID, m.ActionData, m.ExtraMedia, m.Poll, m.CustomEmojiFiles, m.ExportScope, m.TopicID, m.PhotoSkipReason, m.FileSkipReason, m.ThumbnailSkipReason}
-	b, err := json.Marshal(row)
-	if err != nil {
-		return err
+	return json.Marshal(row)
+}
+
+func (w *metadataWriter) appendRaw(b []byte) error {
+	if len(b) == 0 {
+		return nil
 	}
 	if w.count > 0 {
 		if _, err := w.out.WriteString(",\n"); err != nil {
 			return err
 		}
 	}
-	_, err = w.out.Write(b)
+	_, err := w.out.Write(b)
 	w.count++
 	return err
 }

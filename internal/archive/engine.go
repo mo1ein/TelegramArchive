@@ -179,7 +179,7 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 			}
 		}
 		if !opts.Resume {
-			for _, name := range [][]byte{messageBucket, metaBucket} {
+			for _, name := range [][]byte{messageBucket, metaBucket, renderChangesBucket, metadataRowsBucket} {
 				if err := tx.DeleteBucket(name); err != nil && !errors.Is(err, bolt.ErrBucketNotFound) {
 					return err
 				}
@@ -216,6 +216,9 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 		if chatChanged {
 			state.Revision++
 		}
+		if err := prepareRenderIndexes(ctx, tx); err != nil {
+			return err
+		}
 		b, err := json.Marshal(state)
 		if err != nil {
 			return err
@@ -240,7 +243,22 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 				if err := bucket.Put(key, b); err != nil {
 					return err
 				}
+				row, err := messageMetadata(item.Message)
+				if err != nil {
+					return err
+				}
+				if len(row) == 0 {
+					err = tx.Bucket(metadataRowsBucket).Delete(key)
+				} else {
+					err = tx.Bucket(metadataRowsBucket).Put(key, row)
+				}
+				if err != nil {
+					return err
+				}
 				state.Revision++
+				if err := tx.Bucket(renderChangesBucket).Put(key, binary.BigEndian.AppendUint64(nil, state.Revision)); err != nil {
+					return err
+				}
 			}
 			b, err := json.Marshal(state)
 			if err != nil {

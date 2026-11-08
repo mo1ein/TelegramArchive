@@ -1,7 +1,6 @@
 package archive
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -122,60 +121,93 @@ func Render(ctx context.Context, dir, format string, partSize int64, pageSize in
 }
 
 func renderCheckpoint(ctx context.Context, db *bolt.DB, dir string, chat Chat, opts Options) (Result, error) {
-	each := func(yield func(Message) error) error {
-		return db.View(func(tx *bolt.Tx) error {
-			bucket := tx.Bucket(messageBucket)
-			if bucket == nil {
-				return fmt.Errorf("checkpoint has no messages")
-			}
-			return bucket.ForEach(func(_, b []byte) error {
-				var m Message
-				d := json.NewDecoder(bytes.NewReader(b))
-				d.UseNumber()
-				if err := d.Decode(&m); err != nil {
-					return err
-				}
-				return yield(m)
-			})
-		})
+	opts = normalizedRenderOptions(opts)
+	plan, err := planRender(ctx, db, dir, chat, opts, renderCache{}, 0)
+	if err != nil {
+		return Result{}, err
 	}
-	result := Result{}
+	return renderOutputs(ctx, db, dir, chat, opts, &plan)
+}
+
+func renderOutputs(ctx context.Context, db *bolt.DB, dir string, chat Chat, opts Options, plan *renderPlan) (Result, error) {
 	metadata, err := newMetadataWriter(dir, chat)
 	if err != nil {
 		return Result{}, err
 	}
 	defer metadata.abort()
-	withMetadata := func(yield func(Message) error) error {
-		return each(func(m Message) error {
-			if err := metadata.append(m); err != nil {
-				return err
+	wantJSON, wantHTML := opts.Format != "html", opts.Format != "json"
+	temps := map[int]string{}
+	defer removeHTMLTemps(temps)
+	ranges := make([]pageRange, len(plan.pages))
+	for i, page := range plan.pages {
+		ranges[i] = page.pageRange
+	}
+	var messages []Message
+	each := func(yield func(Message) error) error {
+		return plan.walk(ctx, db, wantJSON || !plan.indexed, func(i int, m Message) error {
+			if plan.statsDirty[i] {
+				plan.pages[i].Stats.Observe(m)
+			}
+			if !plan.indexed {
+				if err := metadata.append(m); err != nil {
+					return err
+				}
+			}
+			if wantHTML && plan.htmlDirty[i] {
+				messages = append(messages, m)
+				if m.ID == plan.pages[i].Last {
+					tmp, err := stageHTMLPage(ctx, dir, chat, i+1, i+1 < len(plan.pages), ranges, messages)
+					if err != nil {
+						return err
+					}
+					temps[i+1] = tmp
+					clear(messages)
+					messages = messages[:0]
+				}
 			}
 			return yield(m)
 		})
 	}
-	format := opts.Format
-	if format == "" {
-		format = "json"
+	result := Result{}
+	if wantJSON {
+		result.Paths, _, err = writeChatJSON(ctx, dir, chat, opts.PartSize, each, false)
+	} else {
+		err = each(func(Message) error { return nil })
 	}
-	if format == "json" || format == "both" {
-		paths, stats, err := Write(ctx, dir, chat, opts.PartSize, withMetadata)
+	if err != nil {
+		return Result{}, err
+	}
+	if wantHTML {
+		if plan.pages[0].Count == 0 && plan.htmlDirty[0] {
+			tmp, err := stageHTMLPage(ctx, dir, chat, 1, false, nil, nil)
+			if err != nil {
+				return Result{}, err
+			}
+			temps[1] = tmp
+		}
+		paths, err := publishHTMLPages(ctx, dir, len(plan.pages), temps)
 		if err != nil {
 			return Result{}, err
 		}
 		result.Paths = append(result.Paths, paths...)
-		result.Stats = stats
 	}
-	if format == "html" || format == "both" {
-		iterate := each
-		if format == "html" {
-			iterate = withMetadata
-		}
-		paths, stats, err := WriteHTML(ctx, dir, chat, opts.HTMLPageSize, iterate)
-		if err != nil {
+	if plan.indexed {
+		if err := db.View(func(tx *bolt.Tx) error {
+			return tx.Bucket(metadataRowsBucket).ForEach(func(_, row []byte) error {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				return metadata.appendRaw(row)
+			})
+		}); err != nil {
 			return Result{}, err
 		}
-		result.Paths = append(result.Paths, paths...)
-		result.Stats = stats
+	}
+	for _, page := range plan.pages {
+		result.Stats.merge(page.Stats)
+	}
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
 	}
 	if err := metadata.publish(dir); err != nil {
 		return Result{}, err

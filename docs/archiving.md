@@ -193,6 +193,11 @@ ta render data/AccountExport_123 --format both
 
 `render` also updates older checkpoints to the current presentation and JSON schema.
 Unchanged syncs reuse existing output. Missing or modified output files are rebuilt.
+After messages change, sync rebuilds affected HTML pages and updates their statistics;
+unchanged pages are reused. JSON and HTML share one message-decoding pass when both
+are requested. Desktop-compatible JSON and the metadata sidecar remain complete
+files, so they are rewritten when the archive changes. The first sync after upgrading
+an older checkpoint rebuilds its rendering cache and metadata index once.
 Secret chats are unavailable through this cloud-history client.
 See [Desktop export coverage](desktop-compatibility.md) for supported fields and remaining differences.
 Live export parity with Telegram Desktop has not been verified.

@@ -58,145 +58,163 @@ func WriteHTML(ctx context.Context, dir string, chat Chat, pageSize int, each fu
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, stats, err
 	}
-	var temps []string
+	temps := map[int]string{}
+	defer removeHTMLTemps(temps)
 	var ranges []pageRange
-	var f *os.File
-	var w *bufio.Writer
-	var previous *Message
-	dateMessageID := 0
-	number, count, first, last := 1, 0, 0, 0
-	defer func() {
-		if f != nil {
-			f.Close()
-		}
-		for _, name := range temps {
-			os.Remove(name)
-		}
-	}()
-	open := func() error {
-		var err error
-		f, err = os.CreateTemp(dir, ".html-*")
+	var messages []Message
+	flush := func(next bool) error {
+		number := len(ranges) + 1
+		tmp, err := stageHTMLPage(ctx, dir, chat, number, next, ranges, messages)
 		if err != nil {
 			return err
 		}
-		temps = append(temps, f.Name())
-		w = bufio.NewWriterSize(f, 64*1024)
-		previous = nil
-		page := htmlPage{Chat: chat, Number: number}
-		if desktopAssetDirectory(dir) != dir {
-			page.AssetBase = "../"
+		temps[number] = tmp
+		if len(messages) > 0 {
+			ranges = append(ranges, pageRange{messages[0].ID, messages[len(messages)-1].ID, number})
 		}
-		base := filepath.Base(dir)
-		if strings.HasPrefix(base, "ChatExport_") {
-			page.Back = "../lists/chats.html"
-		} else if base == "saved_messages" {
-			page.Back = "../export_results.html"
-		}
-		if number > 1 {
-			page.Previous = htmlPageName(number - 1)
-		}
-		return htmlHeader.Execute(w, page)
-	}
-	closePage := func(next bool) error {
-		p := htmlPage{Chat: chat, Number: number, Empty: count == 0}
-		if number > 1 {
-			p.Previous = htmlPageName(number - 1)
-		}
-		if next {
-			p.Next = htmlPageName(number + 1)
-		}
-		if err := htmlFooter.Execute(w, p); err != nil {
-			return err
-		}
-		if err := w.Flush(); err != nil {
-			return err
-		}
-		if err := f.Sync(); err != nil {
-			return err
-		}
-		err := f.Close()
-		f = nil
-		if count > 0 {
-			ranges = append(ranges, pageRange{first, last, number})
-		}
-		return err
-	}
-	if err := open(); err != nil {
-		return nil, stats, err
+		messages = messages[:0]
+		return nil
 	}
 	err := each(func(m Message) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if count == pageSize {
-			if err := closePage(true); err != nil {
-				return err
-			}
-			number++
-			count = 0
-			if err := open(); err != nil {
+		if len(messages) == pageSize {
+			if err := flush(true); err != nil {
 				return err
 			}
 		}
-		if count == 0 {
-			first = m.ID
-		}
-		last = m.ID
-		view := prepareHTMLMessage(m, previous)
-		if previous == nil || view.Day != messageTime(*previous).Format("2 January 2006") {
-			dateMessageID--
-			if _, err := fmt.Fprintf(w, "<div class=\"message service\" id=\"message%d\"><div class=\"body details\">%s</div></div>\n", dateMessageID, html.EscapeString(view.Day)); err != nil {
-				return err
-			}
-		}
-		if m.ReplyTo > 0 {
-			target := number
-			i, ok := slices.BinarySearchFunc(ranges, m.ReplyTo, func(p pageRange, id int) int {
-				if p.Last < id {
-					return -1
-				}
-				if p.First > id {
-					return 1
-				}
-				return 0
-			})
-			if ok {
-				target = ranges[i].Page
-			}
-			view.ReplyLink = htmlPageName(target) + "#go_to_message" + strconv.Itoa(m.ReplyTo)
-			view.ReplySamePage = target == number
-		}
-		if err := htmlMessageTemplate.Execute(w, view); err != nil {
-			return err
-		}
-		previous = &m
-		count++
+		messages = append(messages, m)
 		stats.Observe(m)
 		return nil
 	})
 	if err != nil {
 		return nil, stats, err
 	}
-	if err := ctx.Err(); err != nil {
+	if err := flush(false); err != nil {
 		return nil, stats, err
 	}
-	if err := closePage(false); err != nil {
-		return nil, stats, err
+	paths, err = publishHTMLPages(ctx, dir, max(1, len(ranges)), temps)
+	return paths, stats, err
+}
+
+// Date separator IDs are local to each document, so an edit on one page does
+// not change generated IDs on every later page.
+func stageHTMLPage(ctx context.Context, dir string, chat Chat, number int, next bool, ranges []pageRange, messages []Message) (name string, rerr error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp(dir, ".html-*")
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		f.Close()
+		if rerr != nil {
+			os.Remove(f.Name())
+		}
+	}()
+	w := bufio.NewWriterSize(f, 64*1024)
+	page := htmlPage{Chat: chat, Number: number, Empty: len(messages) == 0}
+	if desktopAssetDirectory(dir) != dir {
+		page.AssetBase = "../"
+	}
+	base := filepath.Base(dir)
+	if strings.HasPrefix(base, "ChatExport_") {
+		page.Back = "../lists/chats.html"
+	} else if base == "saved_messages" {
+		page.Back = "../export_results.html"
+	}
+	if number > 1 {
+		page.Previous = htmlPageName(number - 1)
+	}
+	if next {
+		page.Next = htmlPageName(number + 1)
+	}
+	if err := htmlHeader.Execute(w, page); err != nil {
+		return "", err
+	}
+	var previous *Message
+	dateMessageID := 0
+	for i := range messages {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		m := &messages[i]
+		view := prepareHTMLMessage(*m, previous)
+		if previous == nil || view.Day != messageTime(*previous).Format("2 January 2006") {
+			dateMessageID--
+			if _, err := fmt.Fprintf(w, "<div class=\"message service\" id=\"message%d\"><div class=\"body details\">%s</div></div>\n", dateMessageID, html.EscapeString(view.Day)); err != nil {
+				return "", err
+			}
+		}
+		if m.ReplyTo > 0 {
+			target := number
+			i, ok := slices.BinarySearchFunc(ranges, m.ReplyTo, comparePageRange)
+			if ok && ranges[i].Page < number {
+				target = ranges[i].Page
+			}
+			view.ReplyLink = htmlPageName(target) + "#go_to_message" + strconv.Itoa(m.ReplyTo)
+			view.ReplySamePage = target == number
+		}
+		if err := htmlMessageTemplate.Execute(w, view); err != nil {
+			return "", err
+		}
+		previous = m
+	}
+	if err := htmlFooter.Execute(w, page); err != nil {
+		return "", err
+	}
+	if err := w.Flush(); err != nil {
+		return "", err
+	}
+	if err := f.Sync(); err != nil {
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	return f.Name(), nil
+}
+
+func comparePageRange(p pageRange, id int) int {
+	if p.Last < id {
+		return -1
+	}
+	if p.First > id {
+		return 1
+	}
+	return 0
+}
+
+func removeHTMLTemps(temps map[int]string) {
+	for _, name := range temps {
+		os.Remove(name)
+	}
+}
+
+func publishHTMLPages(ctx context.Context, dir string, count int, temps map[int]string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	if err := writeDesktopAssets(desktopAssetDirectory(dir)); err != nil {
-		return nil, stats, err
+		return nil, err
 	}
-	for i, tmp := range temps {
-		dest := filepath.Join(dir, htmlPageName(i+1))
-		if err := os.Rename(tmp, dest); err != nil {
-			return nil, stats, err
+	var paths []string
+	keep := map[string]bool{}
+	for number := 1; number <= count; number++ {
+		dest := filepath.Join(dir, htmlPageName(number))
+		if tmp := temps[number]; tmp != "" {
+			if err := os.Rename(tmp, dest); err != nil {
+				return nil, err
+			}
 		}
 		paths = append(paths, dest)
+		keep[dest] = true
 	}
-	old, _ := filepath.Glob(filepath.Join(dir, "messages*.html"))
-	keep := map[string]bool{}
-	for _, p := range paths {
-		keep[p] = true
+	old, err := filepath.Glob(filepath.Join(dir, "messages*.html"))
+	if err != nil {
+		return nil, err
 	}
 	for _, p := range old {
 		base := filepath.Base(p)
@@ -204,11 +222,11 @@ func WriteHTML(ctx context.Context, dir string, chat Chat, pageSize int, each fu
 		_, err := strconv.Atoi(suffix)
 		if !keep[p] && (suffix == "" || err == nil) {
 			if err := os.Remove(p); err != nil {
-				return nil, stats, err
+				return nil, err
 			}
 		}
 	}
-	return paths, stats, nil
+	return paths, nil
 }
 
 type htmlPoll struct {
