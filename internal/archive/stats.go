@@ -29,6 +29,42 @@ type Stats struct {
 	LastDate        string           `json:"last_date,omitempty"`
 }
 
+// merge combines page aggregates without revisiting unchanged messages. A
+// changed page is counted from scratch, so edits can remove old contributions.
+func (s *Stats) merge(page Stats) {
+	s.Messages += page.Messages
+	s.ServiceMessages += page.ServiceMessages
+	s.Words += page.Words
+	s.Characters += page.Characters
+	s.Replies += page.Replies
+	s.Forwards += page.Forwards
+	s.Edited += page.Edited
+	s.MediaBytes += page.MediaBytes
+	if page.FirstDate != "" && (s.FirstDate == "" || page.FirstDate < s.FirstDate) {
+		s.FirstDate = page.FirstDate
+	}
+	if page.LastDate > s.LastDate {
+		s.LastDate = page.LastDate
+	}
+	if page.BySender != nil {
+		if s.BySender == nil {
+			s.BySender, s.ByDay, s.ByMedia = map[string]int64{}, map[string]int64{}, map[string]int64{}
+		}
+		for key, value := range page.BySender {
+			s.BySender[key] += value
+		}
+		for key, value := range page.ByDay {
+			s.ByDay[key] += value
+		}
+		for key, value := range page.ByMedia {
+			s.ByMedia[key] += value
+		}
+	}
+	for hour, count := range page.ByHour {
+		s.ByHour[hour] += count
+	}
+}
+
 func (s *Stats) Observe(m Message) {
 	if s.BySender == nil {
 		s.BySender = map[string]int64{}

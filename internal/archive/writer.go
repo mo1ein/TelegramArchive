@@ -12,6 +12,10 @@ import (
 // Write emits oldest-first messages supplied by each. All temporary parts are
 // finished before publishing. A single oversized message gets its own part.
 func Write(ctx context.Context, dir string, chat Chat, maxBytes int64, each func(func(Message) error) error) (paths []string, stats Stats, rerr error) {
+	return writeChatJSON(ctx, dir, chat, maxBytes, each, true)
+}
+
+func writeChatJSON(ctx context.Context, dir string, chat Chat, maxBytes int64, each func(func(Message) error) error, observe bool) (paths []string, stats Stats, rerr error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, stats, err
 	}
@@ -94,7 +98,9 @@ func Write(ctx context.Context, dir string, chat Chat, maxBytes int64, each func
 		}
 		size += sep + int64(len(b))
 		count++
-		stats.Observe(m)
+		if observe {
+			stats.Observe(m)
+		}
 		return nil
 	})
 	if err != nil {

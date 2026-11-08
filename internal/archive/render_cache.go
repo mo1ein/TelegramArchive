@@ -2,6 +2,7 @@ package archive
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -18,6 +19,8 @@ type outputStamp struct {
 }
 
 type renderCache struct {
+	Chat     string
+	Pages    []renderedPage
 	Version  int
 	Revision uint64
 	Format   string
@@ -30,7 +33,7 @@ type renderCache struct {
 
 var renderCacheKey = []byte("render_cache")
 
-const exportFormatVersion = 3
+const exportFormatVersion = 4
 
 // Reuse only a successful render of the same checkpoint/settings whose output
 // files still exist with the original size and modification time.
@@ -38,36 +41,20 @@ func renderOrReuse(ctx context.Context, db *bolt.DB, dir string, chat Chat, opts
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}
+	opts = normalizedRenderOptions(opts)
 	format, pageSize := opts.Format, opts.HTMLPageSize
-	if format == "" {
-		format = "json"
-	}
-	if pageSize == 0 {
-		pageSize = 1000
+	chatJSON, err := json.Marshal(chat)
+	if err != nil {
+		return Result{}, err
 	}
 	var cache renderCache
-	err := db.View(func(tx *bolt.Tx) error {
+	err = db.View(func(tx *bolt.Tx) error {
 		return json.Unmarshal(tx.Bucket(metaBucket).Get(renderCacheKey), &cache)
 	})
-	if err == nil && cache.Version == exportFormatVersion && cache.Revision == revision && cache.Format == format && cache.PartSize == opts.PartSize && cache.PageSize == pageSize && len(cache.Files) > 0 {
+	if err == nil && cache.Version == exportFormatVersion && cache.Chat == string(chatJSON) && cache.Revision == revision && cache.Format == format && cache.PartSize == opts.PartSize && cache.PageSize == pageSize && len(cache.Files) > 0 {
 		valid := true
 		for _, file := range cache.Files {
-			if !filepath.IsLocal(file.Path) {
-				valid = false
-				break
-			}
-			root := dir
-			if file.Shared {
-				asset, err := desktopAssets.Open("desktop_assets/" + filepath.ToSlash(file.Path))
-				if err != nil {
-					valid = false
-					break
-				}
-				asset.Close()
-				root = desktopAssetDirectory(dir)
-			}
-			st, err := os.Stat(filepath.Join(root, file.Path))
-			if err != nil || !st.Mode().IsRegular() || st.Size() != file.Size || !st.ModTime().Equal(file.Modified) {
+			if !validOutputStamp(dir, file) {
 				valid = false
 				break
 			}
@@ -84,11 +71,15 @@ func renderOrReuse(ctx context.Context, db *bolt.DB, dir string, chat Chat, opts
 			return Result{Paths: paths, Stats: cache.Stats}, nil
 		}
 	}
-	result, err := renderCheckpoint(ctx, db, dir, chat, opts)
+	plan, err := planRender(ctx, db, dir, chat, opts, cache, revision)
 	if err != nil {
 		return Result{}, err
 	}
-	cache = renderCache{Version: exportFormatVersion, Revision: revision, Format: format, PartSize: opts.PartSize, PageSize: pageSize, Stats: result.Stats}
+	result, err := renderOutputs(ctx, db, dir, chat, opts, &plan)
+	if err != nil {
+		return Result{}, err
+	}
+	cache = renderCache{Chat: string(chatJSON), Pages: plan.pages, Version: exportFormatVersion, Revision: revision, Format: format, PartSize: opts.PartSize, PageSize: pageSize, Stats: result.Stats}
 	for _, path := range result.Paths {
 		rel, err := filepath.Rel(dir, path)
 		if err != nil {
@@ -122,6 +113,48 @@ func renderOrReuse(ctx context.Context, db *bolt.DB, dir string, chat Chat, opts
 	if err != nil {
 		return Result{}, err
 	}
-	err = db.Update(func(tx *bolt.Tx) error { return tx.Bucket(metaBucket).Put(renderCacheKey, b) })
+	err = db.Update(func(tx *bolt.Tx) error {
+		if err := tx.Bucket(metaBucket).Put(renderCacheKey, b); err != nil {
+			return err
+		}
+		if changes := tx.Bucket(renderChangesBucket); changes != nil {
+			cursor := changes.Cursor()
+			for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+				if len(value) == 8 && binary.BigEndian.Uint64(value) <= revision {
+					if err := cursor.Delete(); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	})
 	return result, err
+}
+
+func normalizedRenderOptions(opts Options) Options {
+	if opts.Format == "" {
+		opts.Format = "json"
+	}
+	if opts.HTMLPageSize == 0 {
+		opts.HTMLPageSize = 1000
+	}
+	return opts
+}
+
+func validOutputStamp(dir string, file outputStamp) bool {
+	if !filepath.IsLocal(file.Path) {
+		return false
+	}
+	root := dir
+	if file.Shared {
+		asset, err := desktopAssets.Open("desktop_assets/" + filepath.ToSlash(file.Path))
+		if err != nil {
+			return false
+		}
+		asset.Close()
+		root = desktopAssetDirectory(dir)
+	}
+	st, err := os.Stat(filepath.Join(root, file.Path))
+	return err == nil && st.Mode().IsRegular() && st.Size() == file.Size && st.ModTime().Equal(file.Modified)
 }
