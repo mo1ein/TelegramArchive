@@ -19,7 +19,7 @@ git diff --check
 Format changed Go files with `gofmt`. Run `make bench` when changing archive
 throughput or memory use, and report the workload and results. Keep transfer-core
 and Telegram protocol dependencies compatible; their pinned versions are in
-`go.mod` and the README.
+`go.mod` and [the compatibility notes](docs/desktop-compatibility.md).
 
 Tests should use synthetic chats and fake Telegram boundaries. Live-account
 tests require a separate login and should never run automatically in the test
@@ -44,7 +44,8 @@ git diff --cached
 
 Public upstream names and license notices are attribution and must be retained.
 The bundled Desktop icons under `internal/archive/desktop_assets/images/` are
-source assets and must be included in Git. See the license notices in `licenses/`.
+source assets and must be included in Git.
+Their license notices are in [licenses/](licenses/).
 
 ## Existing users
 

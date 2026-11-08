@@ -81,4 +81,4 @@ main/archive discovery, unavailable peers, original migrated groups, metadata
 fidelity, media selection, recovery and refresh, account separation and scheduler
 failure/cancellation. Browser checks cover local assets, nested/RTL text, reply
 navigation, escaping, responsive widths and external-request/console failures.
-
+See [the archive guide](archiving.md#resume-refresh-and-speed) for transfer and memory behavior.

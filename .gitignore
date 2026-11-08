@@ -61,6 +61,8 @@ AccountExport_*/
 *.ogg
 *.wav
 !internal/archive/desktop_assets/images/*.png
+!docs/assets/html-chat.png
+!docs/assets/html-account.png
 
 # Retired Python files are kept locally; the previous implementation is in Git
 /bot.py
