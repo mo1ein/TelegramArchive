@@ -1,4 +1,0 @@
-pyrogram
-tgcrypto
-python-dotenv
-tqdm-loggable

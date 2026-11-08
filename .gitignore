@@ -43,9 +43,7 @@ backups/
 ChatExport_*/
 AccountExport_*/
 *.json
-export_results.html
-messages*.html
-account.html
+*.html
 
 # Downloaded media; the bundled Desktop icons are public source assets
 *.vcf
