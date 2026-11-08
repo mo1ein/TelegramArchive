@@ -12,6 +12,26 @@ import (
 
 type batchSource struct{ fakeSource }
 
+type timedOutBatchSource struct{ fakeSource }
+
+func (*timedOutBatchSource) Download(context.Context, File, string) error {
+	return os.ErrDeadlineExceeded
+}
+
+func TestBatchReturnsTransferTimeoutForSessionRecovery(t *testing.T) {
+	for _, resume := range []bool{false, true} {
+		source := &timedOutBatchSource{fakeSource: fakeSource{items: fakeItems(1), pageSize: 2}}
+		report, err := RunBatch(context.Background(), source, t.TempDir(), []Chat{{ID: 1, Key: "user_1"}, {ID: 2, Key: "user_2"}}, Options{Concurrency: 1, Media: []string{"photos"}, Resume: resume}, nil)
+		want := 2
+		if resume {
+			want = 1
+		}
+		if !errors.Is(err, os.ErrDeadlineExceeded) || len(report.Chats) != want {
+			t.Fatalf("resume=%v report=%+v err=%v", resume, report, err)
+		}
+	}
+}
+
 func (s *batchSource) History(ctx context.Context, chat Chat, cursor string) (Page, error) {
 	if chat.ID == 1 {
 		return Page{}, errors.New("channel unavailable")

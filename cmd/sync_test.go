@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -68,9 +70,17 @@ func TestRecurringBackupDefaultsToIncrementalAndDoesNotOverlap(t *testing.T) {
 			t.Fatal("overlapping backup was started")
 			return nil
 		})
-		other.SetArgs([]string{"--output", dir})
-		if err := other.ExecuteContext(ctx); err == nil || !strings.Contains(err.Error(), "another backup") {
-			t.Fatalf("missing cross-process lock: %v", err)
+		previous, err := os.ReadFile(filepath.Join(dir, "backup-report.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		other.SetArgs([]string{"--output", dir, "--skip-busy"})
+		if err := other.ExecuteContext(ctx); err != nil {
+			t.Fatalf("busy cycle was not skipped: %v", err)
+		}
+		current, err := os.ReadFile(filepath.Join(dir, "backup-report.json"))
+		if err != nil || !bytes.Equal(previous, current) {
+			t.Fatalf("skipped cycle changed the active backup report: %v", err)
 		}
 		return nil
 	})
@@ -80,6 +90,74 @@ func TestRecurringBackupDefaultsToIncrementalAndDoesNotOverlap(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("expected two incremental cycles, got %d", calls)
+	}
+}
+
+func TestBackupLockErrorsAreNotReportedAsContention(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".backup.lock"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	command := newSync(func(context.Context, *cobra.Command, []string) error {
+		t.Fatal("backup ran without a lock")
+		return nil
+	})
+	var output bytes.Buffer
+	command.SetErr(&output)
+	command.SetArgs([]string{"--output", dir})
+	if err := command.ExecuteContext(context.Background()); err == nil || strings.Contains(output.String(), "Waiting") {
+		t.Fatalf("storage failure treated as contention: err=%v log=%s", err, output.String())
+	}
+}
+
+func TestManualSyncWaitsForBusyOutputAndHonorsCancellation(t *testing.T) {
+	for _, cancelWaiting := range []bool{false, true} {
+		t.Run(map[bool]string{false: "wait then run", true: "cancel waiting"}[cancelWaiting], func(t *testing.T) {
+			dir := t.TempDir()
+			started, release := make(chan struct{}), make(chan struct{})
+			firstDone := make(chan error, 1)
+			first := newSync(func(context.Context, *cobra.Command, []string) error {
+				close(started)
+				<-release
+				return nil
+			})
+			first.SetArgs([]string{"--output", dir})
+			go func() { firstDone <- first.ExecuteContext(context.Background()) }()
+			<-started
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			called := make(chan struct{}, 1)
+			second := newSync(func(context.Context, *cobra.Command, []string) error { called <- struct{}{}; return nil })
+			var log bytes.Buffer
+			second.SetErr(&log)
+			second.SetArgs([]string{"--output", dir})
+			secondDone := make(chan error, 1)
+			go func() { secondDone <- second.ExecuteContext(ctx) }()
+			select {
+			case err := <-secondDone:
+				close(release)
+				<-firstDone
+				t.Fatalf("manual sync did not wait: %v", err)
+			case <-called:
+				t.Fatal("overlapping sync started")
+			case <-time.After(200 * time.Millisecond):
+			}
+			if cancelWaiting {
+				cancel()
+			}
+			close(release)
+			if err := <-firstDone; err != nil {
+				t.Fatal(err)
+			}
+			err := <-secondDone
+			if cancelWaiting {
+				if !errors.Is(err, context.Canceled) || len(called) != 0 {
+					t.Fatalf("waiting did not cancel: err=%v calls=%d", err, len(called))
+				}
+			} else if err != nil || len(called) != 1 || !strings.Contains(log.String(), "Waiting") {
+				t.Fatalf("wait did not resume cleanly: err=%v calls=%d log=%s", err, len(called), log.String())
+			}
+		})
 	}
 }
 

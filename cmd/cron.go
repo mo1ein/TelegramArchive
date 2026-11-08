@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -54,7 +56,8 @@ func newCron(manager managedcron.Manager, execute managedcron.Runner) *cobra.Com
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Installed cron job %q: %s (cron's timezone)\nOutput: %s\nLog: %s\nTa can exit; cron will launch each backup.\n", name, expression, dir, job.Log)
 		if runNow {
-			return managedcron.Run(cmd.Context(), manager.File(name), cmd.OutOrStdout(), execute)
+			skipBusy, _ := cmd.Flags().GetBool("skip-busy")
+			return managedcron.Run(cmd.Context(), manager.File(name), cmd.OutOrStdout(), cronRunWithSkipBusy(execute, cmd.Flags().Changed("skip-busy") && skipBusy))
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Run the first backup now with: ta cron run %s\n", name)
 		return nil
@@ -99,6 +102,7 @@ func newCron(manager managedcron.Manager, execute managedcron.Runner) *cobra.Com
 		return nil
 	}}
 	var file string
+	var skipBusy bool
 	run := &cobra.Command{Use: "run NAME", Short: "Run an installed cron backup now", Args: cobra.MaximumNArgs(1), Annotations: map[string]string{"offline": "true"}, RunE: func(cmd *cobra.Command, args []string) error {
 		jobFile := file
 		if jobFile != "" {
@@ -114,10 +118,26 @@ func newCron(manager managedcron.Manager, execute managedcron.Runner) *cobra.Com
 			}
 			jobFile = manager.File(args[0])
 		}
-		return managedcron.Run(cmd.Context(), jobFile, cmd.OutOrStdout(), execute)
+		runner := execute
+		if file == "" || cmd.Flags().Changed("skip-busy") {
+			runner = cronRunWithSkipBusy(execute, skipBusy)
+		} else {
+			// Older saved jobs predate --skip-busy. Automatic runs must still
+			// skip an occupied output folder instead of building a queue.
+			runner = func(ctx context.Context, job managedcron.Job, output io.Writer) error {
+				for _, arg := range job.Arguments {
+					if arg == "--skip-busy" || strings.HasPrefix(arg, "--skip-busy=") {
+						return execute(ctx, job, output)
+					}
+				}
+				return cronRunWithSkipBusy(execute, true)(ctx, job, output)
+			}
+		}
+		return managedcron.Run(cmd.Context(), jobFile, cmd.OutOrStdout(), runner)
 	}}
 	run.Flags().StringVar(&file, "file", "", "saved cron job path")
 	run.Flags().MarkHidden("file")
+	run.Flags().BoolVar(&skipBusy, "skip-busy", false, "skip a busy output folder instead of waiting")
 	logs := &cobra.Command{Use: "logs NAME", Short: "Show recent output from a cron backup", Args: cobra.ExactArgs(1), Annotations: map[string]string{"offline": "true"}, RunE: func(cmd *cobra.Command, args []string) error {
 		if err := managedcron.ValidateName(args[0]); err != nil {
 			return err
@@ -155,6 +175,16 @@ func newCron(manager managedcron.Manager, execute managedcron.Runner) *cobra.Com
 	}}
 	group.AddCommand(add, list, remove, run, logs)
 	return group
+}
+
+func cronRunWithSkipBusy(execute managedcron.Runner, skipBusy bool) managedcron.Runner {
+	return func(ctx context.Context, job managedcron.Job, output io.Writer) error {
+		args := slices.DeleteFunc(slices.Clone(job.Arguments), func(arg string) bool {
+			return arg == "--skip-busy" || strings.HasPrefix(arg, "--skip-busy=")
+		})
+		job.Arguments = append(args, fmt.Sprintf("--skip-busy=%t", skipBusy))
+		return execute(ctx, job, output)
+	}
 }
 
 // Freeze effective settings rather than relying on cron inheriting a terminal's

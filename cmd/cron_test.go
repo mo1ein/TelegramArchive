@@ -46,11 +46,18 @@ func TestCronInstallCapturesSettingsAndRunsSyncOnlyOnce(t *testing.T) {
 			dir := t.TempDir()
 			t.Chdir(dir)
 			t.Setenv("TA_NS", "personal")
+			t.Setenv("TA_DOWNLOAD_TIMEOUT", "90s")
 			t.Setenv("TA_PROXY", "socks5://user:private@127.0.0.1:1080")
 			table := &testCronTable{content: "# unrelated\n0 1 * * * /usr/bin/true\n"}
 			manager := managedcron.Manager{Directory: filepath.Join(dir, "jobs"), Table: table}
 			calls := 0
-			root := cronRoot(manager, func(ctx context.Context, job managedcron.Job, out io.Writer) error { calls++; return nil })
+			root := cronRoot(manager, func(ctx context.Context, job managedcron.Job, out io.Writer) error {
+				calls++
+				if !slices.Contains(job.Arguments, "--skip-busy=false") {
+					t.Fatalf("--run-now should wait for the output folder: %v", job.Arguments)
+				}
+				return nil
+			})
 			var output bytes.Buffer
 			root.SetOut(&output)
 			args := []string{"--storage=type=bolt,path=sessions", "cron", "add", "channel", "--chat=Private group", "--every=6h", "--media=all", "--format=both", "--output=backup", "--run-now"}
@@ -74,7 +81,7 @@ func TestCronInstallCapturesSettingsAndRunsSyncOnlyOnce(t *testing.T) {
 			if job.Environment["TA_PROXY"] != "socks5://user:private@127.0.0.1:1080" || job.Environment["ALL_PROXY"] != "" {
 				t.Fatal("proxy snapshot was not preserved")
 			}
-			for _, value := range []string{"--ns=personal", "--storage=path=" + filepath.Join(dir, "sessions") + ",type=bolt", "--output=" + filepath.Join(dir, "backup"), "--resume=true", "--chat=Private group"} {
+			for _, value := range []string{"--ns=personal", "--storage=path=" + filepath.Join(dir, "sessions") + ",type=bolt", "--output=" + filepath.Join(dir, "backup"), "--resume=true", "--chat=Private group", "--skip-busy=true", "--download-timeout=1m30s"} {
 				if !slices.Contains(job.Arguments, value) {
 					t.Fatalf("missing %s in %v", value, job.Arguments)
 				}
@@ -108,6 +115,51 @@ func TestCronInstallCapturesSettingsAndRunsSyncOnlyOnce(t *testing.T) {
 			}
 			if len(phases) != want {
 				t.Fatalf("saved job backed up the wrong scope: %v", phases)
+			}
+		})
+	}
+}
+
+func TestCronManualRunWaitsAndAutomaticRunSkipsBusyFolder(t *testing.T) {
+	for _, test := range []struct {
+		name, want string
+		args       []string
+		legacy     bool
+	}{
+		{name: "manual", args: []string{"run", "channel"}, want: "--skip-busy=false"},
+		{name: "automatic", args: []string{"run", "--file"}, want: "--skip-busy=true"},
+		{name: "automatic legacy job", args: []string{"run", "--file"}, want: "--skip-busy=true", legacy: true},
+		{name: "manual skip", args: []string{"run", "channel", "--skip-busy"}, want: "--skip-busy=true"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			manager := managedcron.Manager{Directory: filepath.Join(dir, "jobs"), Table: &testCronTable{}}
+			job := managedcron.Job{Name: "channel", Schedule: "0 */6 * * *", Executable: "/usr/bin/true", Directory: dir, Arguments: []string{"sync", "--skip-busy=true"}, Log: filepath.Join(dir, "channel.log")}
+			if test.legacy {
+				job.Arguments = []string{"sync"}
+			}
+			if err := manager.Install(context.Background(), job); err != nil {
+				t.Fatal(err)
+			}
+			called := false
+			command := newCron(manager, func(ctx context.Context, job managedcron.Job, output io.Writer) error {
+				called = true
+				if !slices.Contains(job.Arguments, test.want) {
+					t.Fatalf("incorrect lock policy: %v", job.Arguments)
+				}
+				return nil
+			})
+			args := slices.Clone(test.args)
+			if strings.HasPrefix(test.name, "automatic") {
+				args = append(args, manager.File(job.Name))
+			}
+			command.SetArgs(args)
+			if err := command.ExecuteContext(context.Background()); err != nil || !called {
+				t.Fatalf("called=%v err=%v", called, err)
+			}
+			saved, err := managedcron.ReadJob(manager.File(job.Name))
+			if err != nil || !slices.Equal(saved.Arguments, job.Arguments) {
+				t.Fatalf("manual override changed the installed job: job=%+v err=%v", saved, err)
 			}
 		})
 	}

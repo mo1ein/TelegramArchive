@@ -61,8 +61,11 @@ ta cron remove my-channel
 
 `cron add` installs or updates a named job in your user crontab. Other cron entries stay intact.
 Each trigger runs one incremental `sync` and exits. You can close ta between runs.
-`--run-now` starts the first backup immediately; omit it to install and exit.
-A trigger is skipped while the same job is running. Failed jobs retry at the next scheduled time.
+`--run-now` starts the first backup after installation; omit it to install and exit.
+If another backup is using the same output folder, `--run-now` and `ta cron run NAME`
+wait for it to finish. Ctrl+C cancels waiting and keeps the installed cron job.
+Automatic cron runs skip a busy output folder, and triggers are also skipped while
+the same job is running. Failed jobs retry at the next scheduled time.
 
 `--every 6h` means 00:00, 06:00, 12:00 and 18:00 in cron's timezone.
 Use whole minutes that divide an hour, or whole hours that divide a day.
@@ -74,6 +77,34 @@ ta saves the login namespace, session-storage path, proxy, working directory and
 Keep the binary and working directory in place. Removing a job keeps its archives and logs.
 For several channels on one account, use one job with `--chat first,second` or `--all --types channels`.
 Concurrent jobs need separate saved logins and output roots.
+
+#### Cron jobs for different accounts
+
+Use a separate saved login namespace (`-n`) for each Telegram account.
+Each cron job saves its selected namespace, so jobs for different accounts can run independently.
+
+```sh
+# List existing accounts and namespaces.
+ta accounts
+
+# Log in once per account; scan each QR with the matching Telegram account.
+ta -n account1 login -T qr
+ta -n account2 login -T qr
+
+# Schedule one chat from each account with different job names and output roots.
+ta -n account1 cron add account1-chat --chat "first_channel" --every 6h \
+  --media all --format both --output "$HOME/backups/account1"
+
+ta -n account2 cron add account2-chat --chat "second_channel" --every 6h \
+  --media all --format both --output "$HOME/backups/account2"
+
+ta cron list
+```
+
+Replace `first_channel` and `second_channel` with the desired chat usernames, URLs or IDs.
+If an account is already saved under `default`, use `-n default` for its job and skip that login step.
+Job names are shared across namespaces: reusing a name updates the existing job.
+Keep a separate output root for each account. Add `--run-now` to also start a backup immediately.
 
 ### Foreground sync
 
@@ -113,7 +144,12 @@ Unchanged chats reuse their JSON, HTML and statistics.
 
 Each cycle runs chats first, then account sections. A failed chat phase does not prevent the account phase.
 `backup-report.json` records the latest cycle. Per-chat and account reports provide the details.
-An output-root lock prevents overlapping syncs.
+An output-root lock prevents overlapping syncs, even with separate login namespaces.
+One-time syncs wait for a busy output folder; recurring syncs skip the busy cycle
+by default. `--skip-busy` makes a one-time sync skip too; `--skip-busy=false`
+makes recurring runs wait. `--job-timeout` also limits time spent waiting.
+The `.backup.lock` file remains between runs; its presence does not mean a backup
+is active. The operating system releases the lock when the process exits.
 The login is released between phases and while waiting.
 Failed cycles retry at the next interval. Missed intervals are skipped.
 Ctrl+C or SIGTERM cancels the current cycle; restarting continues from checkpoints.

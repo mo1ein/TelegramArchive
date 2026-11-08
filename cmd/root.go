@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"fmt"
+
 	upstreamcmd "github.com/iyear/tdl/cmd"
 	sessionkv "github.com/iyear/tdl/pkg/kv"
+	transport "github.com/mo1ein/TelegramArchive/internal/telegram"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -14,6 +17,8 @@ func New() *cobra.Command {
 	root.Use = "ta"
 	root.Short = "Back up Telegram chats and account data as JSON or offline HTML"
 	root.Version = version()
+	root.PersistentFlags().Duration(flagDownloadTimeout, transport.DefaultDownloadTimeout, "inactivity limit for archive history reads and media transfers; 0 disables")
+	_ = viper.BindPFlag(flagDownloadTimeout, root.PersistentFlags().Lookup(flagDownloadTimeout))
 	for _, command := range root.Commands() {
 		if command.Name() == "version" || command.Name() == "recover" {
 			root.RemoveCommand(command)
@@ -27,6 +32,9 @@ func New() *cobra.Command {
 	wrapLoginIdentity(root)
 	pre, post := root.PersistentPreRunE, root.PersistentPostRunE
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if viper.GetDuration(flagDownloadTimeout) < 0 {
+			return fmt.Errorf("download-timeout cannot be negative")
+		}
 		if cmd.Name() == "stats" || cmd.Annotations["offline"] == "true" {
 			return nil
 		}

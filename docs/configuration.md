@@ -18,6 +18,16 @@ ta -n work login -T qr
 ```
 
 `accounts` lists saved namespaces, account IDs and usernames.
+Sessions already used by another process appear as `[busy]`; the command keeps
+listing the remaining namespaces. Other account errors appear as `[unavailable]`
+and are reported after the list. An active session's identity becomes available
+when its current command finishes.
+
+Different namespaces can log in to the same Telegram account. Matching account
+IDs mean the same account, even when the namespace names differ. Existing archives
+belong to the recorded Telegram account ID; use that account to resume them or
+choose a separate output folder for another account.
+
 Login also prints your account ID and username. Choose QR, phone/code or Desktop session import with `-T`.
 Fresh sessions and logs go under `~/.ta/`. Existing ta session stores are reused.
 Commands accept flags and exported `TA_*` settings. Explicit flags take priority.

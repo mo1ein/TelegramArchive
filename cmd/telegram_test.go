@@ -19,11 +19,13 @@ import (
 	"github.com/gotd/td/tdsync"
 	"github.com/gotd/td/tgerr"
 	"github.com/mo1ein/TelegramArchive/internal/archive"
+	transport "github.com/mo1ein/TelegramArchive/internal/telegram"
 	"go.uber.org/zap"
 )
 
 func TestRetryTelegramTransportFailures(t *testing.T) {
 	for _, failure := range []error{
+		&transport.DownloadStalledError{Path: "video_files/thumbnail.jpg", IdleTimeout: time.Minute},
 		fmt.Errorf("group: task readLoop: read intermediate: read length: %w", io.EOF),
 		io.ErrUnexpectedEOF,
 		io.ErrClosedPipe,

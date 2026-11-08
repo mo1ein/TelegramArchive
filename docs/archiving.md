@@ -36,15 +36,19 @@ Checkpoints verify the logged-in account. Use a separate output root for each ac
 ## Archive chats and media
 
 `archive` defaults to Saved Messages (`me`), JSON, photos and `--resume=true`.
-Choose chats by username, Telegram URL, ID or a joined group/channel name.
+Choose chats by displayed name, username, Telegram URL or ID.
 Repeat `--chat` or separate values with commas.
 
 ```sh
 # Usernames and Saved Messages.
 ta archive --chat me,telegram --media all
 
-# Private groups work by name. Use ta chat ls to find their IDs.
+# People and private groups work by their displayed chat name.
+ta archive --chat "mammad" --media all
 ta archive --chat "Book Club" --media all
+# An @ prefix explicitly selects a username instead of a displayed name.
+ta archive --chat "@mammad" --media all
+# Use ta chat ls to find chat IDs.
 ta archive --chat=-1001234567890 --media none
 
 # Custom display name and folder label for one chat.
@@ -71,8 +75,12 @@ ta archive --chat me --since 2026-01-01 --until 2026-02-01 \
 ta --proxy socks5://127.0.0.1:1080 -n personal archive --chat me
 ```
 
-Name matching ignores case and searches main and archived dialogs.
-Use a numeric ID when several chats share a name. `ta chat ls` lists names and IDs.
+Name matching ignores case and extra spaces and searches main and archived chats,
+including personal conversations. Bare names first match the full displayed chat
+name, then fall back to usernames if no displayed name matches. Prefix a username
+with `@`, or use a Telegram URL, to select it explicitly.
+When several chats share a displayed name, ta lists their IDs and asks you to
+choose an ID or `@username`. `ta chat ls` lists names and IDs.
 `--export-name` changes the display name and folder label for one chat.
 The original username stays in `archive-metadata.json`.
 This option does not anonymize the backup.
@@ -104,7 +112,9 @@ That history gets a separate linked folder with its original IDs.
 `--include-left --all --takeout` also looks for left channels.
 Telegram may restrict these to your own messages; the export records that limit.
 
-A failed chat does not stop the others. `run-report.json` lists results and discovery warnings.
+A failed chat does not stop the others. With resume enabled, a stalled transfer
+returns early so ta can recreate the connection before continuing other chats.
+`run-report.json` lists results and discovery warnings.
 The command returns a nonzero exit status if any chat fails.
 
 ## Resume, refresh and speed
@@ -135,6 +145,15 @@ Published files remain available until their replacements are ready.
 
 With resume enabled, `archive` retries dropped connections up to five times.
 Each fresh session fetches new file references and reuses completed work.
+History pages and media requests that stop responding also trigger this recovery
+after two minutes without data or a server response. This includes connecting to
+a media data center.
+Successful responses and downloaded chunks reset the inactivity timer; Telegram's
+explicit flood waits extend it. Set `--download-timeout 5m` for a longer limit or
+`--download-timeout 0` to disable it. The timer does not limit the total duration of
+a healthy download or history scan; each history page gets a fresh timer.
+A running cron process uses the version it started with;
+restart a stalled run after upgrading to enable this behavior.
 Ctrl+C, authorization errors and local file errors stop the run.
 `--resume=false` disables these session retries.
 
@@ -150,7 +169,38 @@ ta reads history in pages of 100 messages. Downloads run in parallel:
 ta -l 4 -t 4 --pool 8 archive --chat me --media all
 ```
 
-The progress bar shows transferred bytes, processed messages and active downloads.
+Before downloading, ta scans the pending history across all selected chats to
+calculate the total download size. Completed local files and excluded media do
+not count toward the remaining work. This preparation adds a history scan before
+downloads start; it does not download media twice. A large first backup can spend
+several minutes here. During this scan, progress shows the current chat, messages
+scanned, files found and pending bytes found:
+
+```text
+Scanning Fadi
+[................................]     --  1.0 GiB found
+Elapsed 3m0s · 23500 messages scanned · 900 files found
+```
+
+The byte count grows as more pending files are found. Download percentage, speed
+and ETA appear after the scan completes and the total size is known. Incremental
+backups scan new or unfinished history; `--refresh` also revisits older messages.
+
+One progress bar covers the entire selected chat backup. It shows a current
+download's filename, downloaded/total bytes, speed, elapsed time and ETA:
+
+```text
+123_document.pdf
+[############....................]  38.0%  114 MiB / 300 MiB
+Elapsed 28s · ETA 46s · 4.1 MiB/s
+```
+
+With parallel downloads, the filename is the most recently started file that is
+still downloading. The bar reaches 100% after the archive output is written.
+Messages arriving after preparation are left for the next sync. If Telegram does
+not report a file size, progress uses completed files and omits the total byte
+size. Cron and redirected output receive periodic plain text updates.
+
 History stays on disk; output streams in date order.
 Memory holds a history page, transfer buffers and statistics maps.
 Account photo, story and contact lists keep their metadata in memory.

@@ -16,6 +16,7 @@ Inspired by [tdl](https://github.com/iyear/tdl), ta uses its transfer and sessio
 - Parallel downloads with progress, resume and recovery.
 - Account data and Saved Messages backups.
 - Incremental sync, refresh and cron schedules.
+- Multiple saved Telegram accounts with separate cron backups.
 - Offline rendering, statistics, uploads and forwarding.
 
 ## Installation
@@ -78,6 +79,9 @@ ta cron add my-channel --chat "channel_username" --every 6h \
 Use `--output` to choose a destination. Keep the same destination and filters when resuming.
 Use a separate output root for each Telegram account.
 Cron requires a working cron service and the `crontab` command.
+
+See [Cron jobs for different accounts](docs/backups.md#cron-jobs-for-different-accounts)
+for separate saved logins and schedules.
 
 ## HTML preview
 
