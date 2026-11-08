@@ -14,7 +14,6 @@ import (
 	transport "github.com/mo1ein/TelegramArchive/internal/telegram"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	bolt "go.etcd.io/bbolt"
 )
 
 type backupComponent struct {
@@ -47,10 +46,10 @@ func newSyncPlan(run childRunner, planned func(*cobra.Command, string, schedule.
 	cmd.Short = "Sync selected Telegram data once or on a recurring interval"
 	cmd.Long = "Back up selected Telegram content, merging new messages into existing archives.\nAccount data and Saved Messages stay in a separate directory.\nAdd --every to repeat; use --refresh to update older message edits too."
 	cmd.Annotations = map[string]string{"offline": "true"}
-	cmd.Flags().Lookup("chat").Usage = "explicit chat usernames, URLs or IDs; defaults to all matching chats"
+	cmd.Flags().Lookup("chat").Usage = "chat display names, usernames, URLs or IDs; defaults to all matching chats"
 	cmd.Flags().Lookup("takeout").Usage = "use bulk export sessions; account sections use takeout by default"
 	cmd.Example = "  ta sync --everything --every 6h --format both\n  ta sync --all --types channels --media all --every 1h"
-	var everything, account bool
+	var everything, account, skipBusy bool
 	var chats bool
 	var include []string
 	var timing schedule.Options
@@ -62,6 +61,7 @@ func newSyncPlan(run childRunner, planned func(*cobra.Command, string, schedule.
 	cmd.Flags().IntVar(&timing.Runs, "runs", 0, "number of recurring cycles; 0 keeps running")
 	cmd.Flags().DurationVar(&timing.Timeout, "job-timeout", 0, "maximum duration per entire backup cycle")
 	cmd.Flags().BoolVar(&timing.StopOnError, "stop-on-error", false, "stop recurring backups after a failed cycle")
+	cmd.Flags().BoolVar(&skipBusy, "skip-busy", false, "skip a busy output folder instead of waiting (automatic for recurring runs)")
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		if !cmd.Flags().Changed("all") && !cmd.Flags().Changed("chat") {
 			cmd.Flags().Set("all", "true")
@@ -87,6 +87,9 @@ func newSyncPlan(run childRunner, planned func(*cobra.Command, string, schedule.
 		}
 		if timing.Every > 0 && !f.resume {
 			return fmt.Errorf("recurring backups require --resume=true to sync existing archives")
+		}
+		if timing.Every > 0 && !cmd.Flags().Changed("skip-busy") {
+			skipBusy = true
 		}
 		if len(include) != 1 || include[0] != "all" {
 			if len(include) == 0 {
@@ -135,22 +138,22 @@ func newSyncPlan(run childRunner, planned func(*cobra.Command, string, schedule.
 		}
 		setScheduleLogging(cmd, &timing)
 		return schedule.Run(cmd.Context(), timing, func(ctx context.Context) error {
-			return runBackupCycle(ctx, cmd, dir, commands, run)
+			return runBackupCycle(ctx, cmd, dir, commands, run, skipBusy)
 		})
 	}
 	return cmd
 }
 
-func runBackupCycle(ctx context.Context, cmd *cobra.Command, dir string, commands [][]string, run childRunner) error {
+func runBackupCycle(ctx context.Context, cmd *cobra.Command, dir string, commands [][]string, run childRunner, skipBusy bool) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	lock, err := bolt.Open(filepath.Join(dir, ".backup.lock"), 0600, &bolt.Options{Timeout: 100 * time.Millisecond})
-	if errors.Is(err, bolt.ErrTimeout) {
-		return fmt.Errorf("another backup is using %s; retry after it finishes", dir)
-	}
+	lock, err := lockBackupOutput(ctx, dir, skipBusy, cmd.ErrOrStderr())
 	if err != nil {
 		return err
+	}
+	if lock == nil {
+		return nil
 	}
 	defer lock.Close()
 	report := backupReport{Started: time.Now().UTC(), Status: "running"}

@@ -18,10 +18,13 @@ import (
 	"github.com/iyear/tdl/pkg/consts"
 	"github.com/iyear/tdl/pkg/kv"
 	"github.com/iyear/tdl/pkg/tclient"
+	transport "github.com/mo1ein/TelegramArchive/internal/telegram"
 	"github.com/spf13/viper"
 )
 
 const maxArchiveReconnects = 5
+
+const flagDownloadTimeout = "download-timeout"
 
 // A dead gotd client cannot be reused. Recreate the client and transport pools;
 // the archive callback resumes its on-disk checkpoints with fresh file references.
@@ -35,7 +38,6 @@ func tRunArchive(ctx context.Context, resume bool, output io.Writer, f func(cont
 	retries := uint64(0)
 	if resume {
 		retries = maxArchiveReconnects
-		fmt.Fprintf(output, "Automatic connection recovery enabled (up to %d reconnects); completed media will be reused.\n", retries)
 	}
 	attempt := 0
 	return retryTelegram(ctx, backoff.WithMaxRetries(policy, retries), func() error {
@@ -108,7 +110,7 @@ func tRun(ctx context.Context, f func(context.Context, *telegram.Client, storage
 		return fmt.Errorf("open session: %w", err)
 	}
 	proxyURL := telegramProxy()
-	c, err := tclient.New(ctx, tclient.Options{KV: kvd, Proxy: proxyURL, NTP: viper.GetString(consts.FlagNTP), ReconnectTimeout: viper.GetDuration(consts.FlagReconnectTimeout)}, false)
+	c, err := tclient.New(ctx, tclient.Options{KV: kvd, Proxy: proxyURL, NTP: viper.GetString(consts.FlagNTP), ReconnectTimeout: viper.GetDuration(consts.FlagReconnectTimeout)}, false, transport.DownloadActivityMiddleware())
 	if err != nil {
 		return err
 	}

@@ -32,22 +32,27 @@ import (
 
 type Source struct {
 	DownloadCustomEmoji bool
-	api                 *tg.Client
-	pool                dcpool.Pool
-	manager             *peers.Manager
-	chats               map[string]tg.InputPeerClass
-	threads             int
-	takeoutID           int64
-	ranges              []tg.MessageRange
-	accountID           int64
-	self                *tg.User
-	Warnings            []string
-	since               time.Time
-	until               time.Time
+	// DownloadTimeout limits inactivity during history reads and media transfers.
+	DownloadTimeout time.Duration
+	api             *tg.Client
+	pool            dcpool.Pool
+	manager         *peers.Manager
+	chats           map[string]tg.InputPeerClass
+	nameDialogs     []archive.Chat
+	namesLoaded     bool
+	threads         int
+	takeoutID       int64
+	ranges          []tg.MessageRange
+	accountID       int64
+	self            *tg.User
+	Warnings        []string
+	since           time.Time
+	until           time.Time
 }
 
 func New(ctx context.Context, c *telegram.Client, kv storage.Storage, poolSize, threads int, timeout time.Duration, since, until time.Time) *Source {
-	return &Source{api: c.API(), pool: dcpool.NewPool(c, int64(poolSize), tclient.NewDefaultMiddlewares(ctx, timeout)...), manager: peers.Options{Storage: storage.NewPeers(kv)}.Build(c.API()), chats: map[string]tg.InputPeerClass{}, threads: threads, since: since, until: until}
+	middlewares := append(tclient.NewDefaultMiddlewares(ctx, timeout), DownloadActivityMiddleware())
+	return &Source{api: c.API(), pool: dcpool.NewPool(c, int64(poolSize), middlewares...), manager: peers.Options{Storage: storage.NewPeers(kv)}.Build(c.API()), chats: map[string]tg.InputPeerClass{}, threads: threads, since: since, until: until, DownloadTimeout: DefaultDownloadTimeout}
 }
 
 // EnableTakeout explicitly starts Desktop's bulk export session. Do not use
@@ -144,6 +149,10 @@ func (s *Source) Close(success bool) error {
 }
 
 func (s *Source) Resolve(ctx context.Context, ref string) (archive.Chat, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return archive.Chat{}, fmt.Errorf("chat reference cannot be empty")
+	}
 	var p peers.Peer
 	var err error
 	if ref == "me" || ref == "self" {
@@ -178,34 +187,19 @@ func (s *Source) Resolve(ctx context.Context, ref string) (archive.Chat, error) 
 			}
 		}
 	} else {
-		p, err = s.manager.Resolve(ctx, ref)
-		if err != nil {
-			dialogs, listErr := s.Dialogs(ctx, []string{"personal", "bots", "groups", "channels"})
-			if listErr != nil {
-				return archive.Chat{}, fmt.Errorf("resolve chat %q: %w (search joined dialogs: %v)", ref, err, listErr)
+		if isDisplayNameReference(ref) {
+			chat, found, nameErr := s.resolveNamedChat(ctx, ref)
+			if nameErr != nil {
+				return archive.Chat{}, nameErr
 			}
-			refName := strings.TrimPrefix(strings.TrimSpace(ref), "@")
-			var found []archive.Chat
-			for _, chat := range dialogs {
-				if strings.EqualFold(strings.TrimSpace(chat.Name), strings.TrimSpace(ref)) ||
-					chat.Username != "" && strings.EqualFold(chat.Username, refName) {
-					found = append(found, chat)
-				}
-			}
-			if len(found) == 1 {
-				return found[0], nil
-			}
-			if len(found) > 1 {
-				ids := make([]string, 0, len(found))
-				for _, chat := range found {
-					ids = append(ids, fmt.Sprintf("%d (%s)", chat.ID, chat.Type))
-				}
-				return archive.Chat{}, fmt.Errorf("chat name %q matches multiple joined dialogs: %s; select by ID", ref, strings.Join(ids, ", "))
+			if found {
+				return chat, nil
 			}
 		}
+		p, err = s.manager.Resolve(ctx, ref)
 	}
 	if err != nil {
-		return archive.Chat{}, fmt.Errorf("resolve chat %q: %w; for a private group, use its exact joined-dialog name or numeric ID", ref, err)
+		return archive.Chat{}, fmt.Errorf("resolve chat %q: %w; use the full displayed chat name, @username, Telegram URL or numeric ID", ref, err)
 	}
 	return s.addChat(p), nil
 }
@@ -328,11 +322,17 @@ func (s *Source) Dialogs(ctx context.Context, types []string) ([]archive.Chat, e
 	return chats, errors.Join(failures...)
 }
 
-func (s *Source) History(ctx context.Context, chat archive.Chat, cursor string) (archive.Page, error) {
+func (s *Source) History(ctx context.Context, chat archive.Chat, cursor string) (result archive.Page, rerr error) {
 	p, ok := s.chats[chat.Key]
 	if !ok {
 		return archive.Page{}, fmt.Errorf("unresolved chat %q", chat.Key)
 	}
+	name := chat.Name
+	if name == "" {
+		name = chat.Key
+	}
+	ctx, activity := watchDownload(ctx, "history for "+name, s.DownloadTimeout)
+	defer func() { rerr = activity.finish(rerr) }()
 	offset := 0
 	rangeIndex := len(s.ranges) - 1
 	api := s.api
@@ -459,6 +459,8 @@ func (s *Source) DownloadWithProgress(ctx context.Context, file archive.File, de
 	if !ok {
 		return fmt.Errorf("missing remote file location")
 	}
+	ctx, activity := watchDownload(ctx, file.Path, s.DownloadTimeout)
+	defer func() { rerr = activity.finish(rerr) }()
 	api := s.pool.Client(ctx, media.DC)
 	if s.takeoutID != 0 {
 		api = tg.NewClient(takeout.Middleware(s.takeoutID).Handle(api.Invoker()))
@@ -469,8 +471,13 @@ func (s *Source) DownloadWithProgress(ctx context.Context, file archive.File, de
 	}
 	defer func() { rerr = errors.Join(rerr, f.Close()) }()
 	var output io.WriterAt = f
-	if progress != nil {
-		output = downloadProgressWriter{output: f, progress: progress}
+	if activity != nil || progress != nil {
+		output = downloadProgressWriter{output: f, progress: func(n int64) {
+			activity.touch()
+			if progress != nil {
+				progress(n)
+			}
+		}}
 	}
 	_, err = downloader.NewDownloader().WithPartSize(transferdownload.MaxPartSize).Download(api, media.InputFileLoc).WithThreads(tutil.BestThreads(media.Size, s.threads)).Parallel(ctx, output)
 	return err

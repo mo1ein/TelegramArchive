@@ -76,6 +76,7 @@ func NewAccount() *cobra.Command {
 		}
 		return tRun(cmd.Context(), func(ctx context.Context, c *telegram.Client, kv storage.Storage) (rerr error) {
 			source := transport.New(ctx, c, kv, pool, threads, viper.GetDuration(consts.FlagReconnectTimeout), since, until)
+			source.DownloadTimeout = viper.GetDuration(flagDownloadTimeout)
 			defer func() { rerr = errors.Join(rerr, source.Close(rerr == nil)) }()
 			source.DownloadCustomEmoji = slices.Contains(f.media, "stickers")
 			if err := source.Identity(ctx); err != nil {

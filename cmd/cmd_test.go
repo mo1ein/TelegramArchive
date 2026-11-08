@@ -9,11 +9,36 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mo1ein/TelegramArchive/internal/archive"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+func TestDownloadTimeoutConfiguration(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+	t.Setenv("TA_DOWNLOAD_TIMEOUT", "")
+	root := New()
+	if got := viper.GetDuration(flagDownloadTimeout); got != 2*time.Minute {
+		t.Fatalf("default timeout=%s", got)
+	}
+	t.Setenv("TA_DOWNLOAD_TIMEOUT", "90s")
+	if got := viper.GetDuration(flagDownloadTimeout); got != 90*time.Second {
+		t.Fatalf("environment timeout=%s", got)
+	}
+	if err := root.PersistentFlags().Set(flagDownloadTimeout, "0"); err != nil {
+		t.Fatal(err)
+	}
+	if got := viper.GetDuration(flagDownloadTimeout); got != 0 {
+		t.Fatalf("explicit disabling did not override environment: %s", got)
+	}
+	root.SetArgs([]string{"--download-timeout=-1s", "sync", "--output", t.TempDir()})
+	if err := root.ExecuteContext(context.Background()); err == nil || !strings.Contains(err.Error(), "download-timeout cannot be negative") {
+		t.Fatalf("invalid timeout did not fail before starting a backup: %v", err)
+	}
+}
 
 func TestArchiveIgnoresConfigurationFiles(t *testing.T) {
 	viper.Reset()

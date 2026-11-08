@@ -56,6 +56,7 @@ See [session backup and recovery](session-tools.md) to move saved logins.
 | `--pool` | `8` | Connections per Telegram data center |
 | `--delay` | `0s` | Pause between tasks |
 | `--reconnect-timeout` | `5m` | Reconnection backoff limit; `0` removes this time limit |
+| `--download-timeout` | `2m` | Inactivity limit for archive history reads and archive/account media transfers; `0` disables. Telegram flood waits extend the deadline. |
 | `--ntp` | Empty | Optional time server; empty uses the system clock |
 | `--debug` | `false` | Diagnostic logging |
 | `--disable-progress-ps` | `false` | Hide CPU/memory statistics in the progress display |
@@ -85,6 +86,7 @@ ta --disable-progress-ps dl -f ta-export.json
 | `TA_DELAY` | `--delay` |
 | `TA_NTP` | `--ntp` |
 | `TA_RECONNECT_TIMEOUT` | `--reconnect-timeout` |
+| `TA_DOWNLOAD_TIMEOUT` | `--download-timeout` |
 | `TA_DISABLE_PROGRESS_PS` | `--disable-progress-ps` |
 | `TA_TEMPLATE` | Download `--template` |
 

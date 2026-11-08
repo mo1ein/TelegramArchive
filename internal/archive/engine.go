@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	bolt "go.etcd.io/bbolt"
@@ -68,24 +69,26 @@ type TransferEvent struct {
 }
 
 type Options struct {
-	Media        []string
-	Concurrency  int
-	MaxFileSize  int64
-	MinFileSize  int64
-	Extensions   []string
-	MIMETypes    []string
-	OnlyMedia    bool
-	Format       string
-	ExportName   string
-	HTMLPageSize int
-	PartSize     int64
-	Since        time.Time
-	Until        time.Time
-	Resume       bool
-	Refresh      bool
-	Takeout      bool
-	Progress     func(int)
-	OnTransfer   func(TransferEvent)
+	Media          []string
+	Concurrency    int
+	MaxFileSize    int64
+	MinFileSize    int64
+	Extensions     []string
+	MIMETypes      []string
+	OnlyMedia      bool
+	Format         string
+	ExportName     string
+	HTMLPageSize   int
+	PartSize       int64
+	Since          time.Time
+	Until          time.Time
+	Resume         bool
+	Refresh        bool
+	Takeout        bool
+	Progress       func(int)
+	OnTransfer     func(TransferEvent)
+	OnPlan         func(DownloadPlan)
+	snapshotNewest *int
 }
 
 func (o Options) Validate() error {
@@ -155,27 +158,12 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 		return Result{}, fmt.Errorf("open archive checkpoint: %w", err)
 	}
 	defer db.Close()
-	media := slices.Clone(opts.Media)
-	slices.Sort(media)
-	media = slices.Compact(media)
-	exts, mimes := normalizedFilters(opts.Extensions), normalizedFilters(opts.MIMETypes)
-	settings, _ := json.Marshal(struct {
-		ChatID, AccountID int64
-		Takeout           bool
-		Media             []string
-		Max               int64
-		Since, Until      time.Time
-		Min               int64    `json:",omitempty"`
-		Extensions        []string `json:",omitempty"`
-		MIMETypes         []string `json:",omitempty"`
-		OnlyMedia         bool     `json:",omitempty"`
-	}{chat.ID, chat.AccountID, opts.Takeout, media, opts.MaxFileSize, opts.Since, opts.Until, opts.MinFileSize, exts, mimes, opts.OnlyMedia})
-	state := checkpoint{Settings: fmt.Sprintf("%x", sha256.Sum256(settings))}
+	state := checkpoint{Settings: checkpointSettings(chat, opts)}
 	err = db.Update(func(tx *bolt.Tx) error {
 		owner := strconv.FormatInt(chat.AccountID, 10)
 		if meta := tx.Bucket(metaBucket); meta != nil {
 			if saved := meta.Get([]byte("account")); saved != nil && string(saved) != owner {
-				return fmt.Errorf("archive belongs to a different Telegram account; choose a different --output directory")
+				return fmt.Errorf("archive belongs to a different Telegram account (archive: %s; current login: %s); choose the matching -n namespace or a different --output directory", saved, owner)
 			}
 		}
 		if !opts.Resume {
@@ -267,15 +255,59 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 			return tx.Bucket(metaBucket).Put(stateKey, b)
 		})
 	}
-	process := func(items []Item) ([]Item, error) {
+	err = walkHistory(ctx, source, chat, &state, opts, func(items []Item) error {
 		selected := FilterItems(items, opts)
 		if err := downloadPage(ctx, source, dir, selected, opts); err != nil {
-			return nil, err
+			return err
 		}
 		if opts.Progress != nil {
 			opts.Progress(len(selected))
 		}
-		return selected, nil
+		return save(selected)
+	})
+	if err != nil {
+		return Result{}, err
+	}
+	return renderOrReuse(ctx, db, dir, chat, opts, state.Revision)
+}
+
+func checkpointSettings(chat Chat, opts Options) string {
+	media := slices.Clone(opts.Media)
+	slices.Sort(media)
+	media = slices.Compact(media)
+	exts, mimes := normalizedFilters(opts.Extensions), normalizedFilters(opts.MIMETypes)
+	settings, _ := json.Marshal(struct {
+		ChatID, AccountID int64
+		Takeout           bool
+		Media             []string
+		Max               int64
+		Since, Until      time.Time
+		Min               int64    `json:",omitempty"`
+		Extensions        []string `json:",omitempty"`
+		MIMETypes         []string `json:",omitempty"`
+		OnlyMedia         bool     `json:",omitempty"`
+	}{chat.ID, chat.AccountID, opts.Takeout, media, opts.MaxFileSize, opts.Since, opts.Until, opts.MinFileSize, exts, mimes, opts.OnlyMedia})
+	return fmt.Sprintf("%x", sha256.Sum256(settings))
+}
+
+// Planning and execution visit the same pending history. The snapshot bound
+// leaves messages arriving after planning for the next sync.
+func walkHistory(ctx context.Context, source Source, chat Chat, state *checkpoint, opts Options, process func([]Item) error) error {
+	history := func(cursor string) (Page, error) {
+		if err := ctx.Err(); err != nil {
+			return Page{}, err
+		}
+		page, err := source.History(ctx, chat, cursor)
+		if opts.snapshotNewest != nil {
+			items := make([]Item, 0, len(page.Items))
+			for _, item := range page.Items {
+				if item.Message.ID <= *opts.snapshotNewest {
+					items = append(items, item)
+				}
+			}
+			page.Items = items
+		}
+		return page, err
 	}
 	if state.Complete && state.Newest == 0 {
 		state.Complete = false
@@ -284,8 +316,8 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 		state.Cursor = ""
 		state.Complete = false
 		state.Refreshing = true
-		if err := save(nil); err != nil {
-			return Result{}, err
+		if err := process(nil); err != nil {
+			return err
 		}
 	}
 	// Collect new messages first, but don't advance Newest until this whole
@@ -293,9 +325,9 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 	if state.Newest > 0 && !state.Refreshing {
 		boundary, latest, offset := state.Newest, state.Newest, ""
 		for {
-			page, err := source.History(ctx, chat, offset)
+			page, err := history(offset)
 			if err != nil {
-				return Result{}, err
+				return err
 			}
 			var items []Item
 			reached := false
@@ -309,53 +341,45 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 				}
 				items = append(items, item)
 			}
-			items, err = process(items)
-			if err != nil {
-				return Result{}, err
-			}
-			if err := save(items); err != nil {
-				return Result{}, err
+			if err := process(items); err != nil {
+				return err
 			}
 			if page.Done || reached {
 				break
 			}
 			if page.Next == "" || page.Next == offset {
-				return Result{}, fmt.Errorf("history pagination did not advance")
+				return fmt.Errorf("history pagination did not advance")
 			}
 			offset = page.Next
 		}
 		state.Newest = latest
-		if err := save(nil); err != nil {
-			return Result{}, err
+		if err := process(nil); err != nil {
+			return err
 		}
 	}
 	for !state.Complete {
-		page, err := source.History(ctx, chat, state.Cursor)
+		page, err := history(state.Cursor)
 		if err != nil {
-			return Result{}, err
+			return err
 		}
 		if !page.Done && (page.Next == "" || page.Next == state.Cursor) {
-			return Result{}, fmt.Errorf("history pagination did not advance")
+			return fmt.Errorf("history pagination did not advance")
 		}
 		for _, item := range page.Items {
 			if item.Message.ID > state.Newest {
 				state.Newest = item.Message.ID
 			}
 		}
-		items, err := process(page.Items)
-		if err != nil {
-			return Result{}, err
-		}
 		state.Cursor = page.Next
 		state.Complete = page.Done
 		if page.Done {
 			state.Refreshing = false
 		}
-		if err := save(items); err != nil {
-			return Result{}, err
+		if err := process(page.Items); err != nil {
+			return err
 		}
 	}
-	return renderOrReuse(ctx, db, dir, chat, opts, state.Revision)
+	return nil
 }
 
 func downloadPage(ctx context.Context, source Source, dir string, items []Item, opts Options) error {
@@ -415,7 +439,7 @@ func downloadPage(ctx context.Context, source Source, dir string, items []Item, 
 
 func downloadFile(ctx context.Context, source Source, dir string, file File, opts Options) (rerr error) {
 	dest := filepath.Join(dir, filepath.FromSlash(file.Path))
-	if st, err := os.Stat(dest); err == nil && st.Mode().IsRegular() && file.Size > 0 && st.Size() == file.Size {
+	if completedFile(dir, file) {
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0700); err != nil {
@@ -428,14 +452,19 @@ func downloadFile(ctx context.Context, source Source, dir string, file File, opt
 	tmp := f.Name()
 	f.Close()
 	defer os.Remove(tmp)
+	var reported atomic.Int64
+	if opts.OnTransfer != nil {
+		opts.OnTransfer(TransferEvent{Kind: TransferStarted, File: file})
+		defer func() { opts.OnTransfer(TransferEvent{Kind: TransferFinished, File: file, Err: rerr}) }()
+	}
 	if file.Data != nil {
 		err = os.WriteFile(tmp, file.Data, 0600)
 	} else {
 		if progressSource, ok := source.(ProgressSource); ok && opts.OnTransfer != nil {
-			opts.OnTransfer(TransferEvent{Kind: TransferStarted, File: file})
-			defer func() { opts.OnTransfer(TransferEvent{Kind: TransferFinished, File: file, Err: rerr}) }()
 			err = progressSource.DownloadWithProgress(ctx, file, tmp, func(delta int64) {
 				if delta > 0 {
+					// A source may write parallel chunks.
+					reported.Add(delta)
 					opts.OnTransfer(TransferEvent{Kind: TransferProgressed, File: file, Delta: delta})
 				}
 			})
@@ -452,6 +481,9 @@ func downloadFile(ctx context.Context, source Source, dir string, file File, opt
 	}
 	if file.Size > 0 && st.Size() != file.Size {
 		return fmt.Errorf("size mismatch: got %d, expected %d", st.Size(), file.Size)
+	}
+	if opts.OnTransfer != nil && st.Size() > reported.Load() {
+		opts.OnTransfer(TransferEvent{Kind: TransferProgressed, File: file, Delta: st.Size() - reported.Load()})
 	}
 	return os.Rename(tmp, dest)
 }

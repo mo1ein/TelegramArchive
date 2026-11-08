@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -49,6 +50,13 @@ func RunBatch(ctx context.Context, source Source, root string, chats []Chat, opt
 			directories = append(directories, entry.Name())
 		}
 	}
+	var plans map[string]plannedChat
+	if opts.OnPlan != nil {
+		plans, err = planBatch(ctx, source, root, directories, chats, opts)
+		if err != nil {
+			return report, err
+		}
+	}
 	seen := map[string]bool{}
 	for _, chat := range chats {
 		if err := ctx.Err(); err != nil {
@@ -75,7 +83,15 @@ func RunBatch(ctx context.Context, source Source, root string, chats []Chat, opt
 			continue
 		}
 		dir := filepath.Join(root, name)
-		result, err := Run(ctx, source, dir, chat, opts)
+		chatOpts := opts
+		var result Result
+		if plan, exists := plans[chat.Key]; exists {
+			chatOpts.snapshotNewest = &plan.newest
+			err = plan.err
+		}
+		if err == nil {
+			result, err = Run(ctx, source, dir, chat, chatOpts)
+		}
 		if err != nil {
 			record.Error = err.Error()
 			failures = append(failures, fmt.Errorf("%s: %w", chat.Name, err))
@@ -93,6 +109,12 @@ func RunBatch(ctx context.Context, source Source, root string, chats []Chat, opt
 			}
 		}
 		report.Chats = append(report.Chats, record)
+		// Recreate a stalled connection before trying the remaining chats.
+		// Permanent per-chat failures still leave other chats independent.
+		var timeout net.Error
+		if opts.Resume && errors.As(err, &timeout) && timeout.Timeout() {
+			break
+		}
 	}
 	report.Finished = time.Now().UTC()
 	if err := writeJSON(filepath.Join(root, "run-report.json"), report); err != nil {

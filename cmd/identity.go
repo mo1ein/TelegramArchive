@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -44,42 +45,72 @@ func printCurrentIdentity(cmd *cobra.Command) error {
 }
 
 func NewAccounts() *cobra.Command {
+	return newAccounts(func(ctx context.Context) ([]string, error) {
+		return sessionkv.From(ctx).Namespaces()
+	}, readSavedAccount)
+}
+
+func newAccounts(list func(context.Context) ([]string, error), lookup func(context.Context, string) (int64, string, error)) *cobra.Command {
 	return &cobra.Command{
 		Use:   "accounts",
 		Short: "List saved Telegram accounts and their namespaces",
-		Long:  "List saved Telegram accounts. Choose one for a command with -n <namespace>.",
+		Long:  "List saved Telegram accounts. Busy sessions are marked and skipped. Choose an account with -n <namespace>.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			namespaces, err := sessionkv.From(cmd.Context()).Namespaces()
+			namespaces, err := list(cmd.Context())
 			if err != nil {
 				return err
 			}
 			selected := viper.GetString("ns")
+			var failures []error
 			for _, namespace := range namespaces {
-				viper.Set("ns", namespace)
-				err := tRun(cmd.Context(), func(ctx context.Context, client *tdclient.Client, kv storage.Storage) error {
-					source := archiveTelegram.New(ctx, client, kv, viper.GetInt("pool"), viper.GetInt("threads"), viper.GetDuration("reconnect-timeout"), time.Time{}, time.Time{})
-					defer source.Close(true)
-					if err := source.Identity(ctx); err != nil {
-						return err
-					}
-					marker := ""
-					if namespace == selected {
-						marker = " [selected]"
-					}
-					fmt.Fprintf(cmd.OutOrStdout(), "%s  %d  %s%s\n", namespace, source.AccountID(), usernameOrPlaceholder(source.Username()), marker)
-					return nil
-				})
-				if err != nil {
-					return fmt.Errorf("read account in namespace %q: %w", namespace, err)
+				if err := cmd.Context().Err(); err != nil {
+					return err
 				}
+				marker := ""
+				if namespace == selected {
+					marker = " [selected]"
+				}
+				id, username, err := lookup(cmd.Context(), namespace)
+				if canceled := cmd.Context().Err(); canceled != nil {
+					return canceled
+				}
+				if err != nil {
+					var busy *sessionBusyError
+					if errors.As(err, &busy) {
+						fmt.Fprintf(cmd.OutOrStdout(), "%s  [busy]%s\n", namespace, marker)
+						continue
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "%s  [unavailable]%s\n", namespace, marker)
+					failures = append(failures, fmt.Errorf("read account in namespace %q: %w", namespace, err))
+					continue
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "%s  %d  %s%s\n", namespace, id, usernameOrPlaceholder(username), marker)
 			}
 			if len(namespaces) == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "No saved accounts. Log in with ta login -T qr.")
 			}
-			return nil
+			return errors.Join(failures...)
 		},
 	}
+}
+
+func readSavedAccount(ctx context.Context, namespace string) (int64, string, error) {
+	selected := viper.GetString("ns")
+	viper.Set("ns", namespace)
+	defer viper.Set("ns", selected)
+	var id int64
+	var username string
+	err := tRun(ctx, func(ctx context.Context, client *tdclient.Client, kv storage.Storage) error {
+		source := archiveTelegram.New(ctx, client, kv, viper.GetInt("pool"), viper.GetInt("threads"), viper.GetDuration("reconnect-timeout"), time.Time{}, time.Time{})
+		defer source.Close(true)
+		if err := source.Identity(ctx); err != nil {
+			return err
+		}
+		id, username = source.AccountID(), source.Username()
+		return nil
+	})
+	return id, username, err
 }
 
 func usernameOrPlaceholder(username string) string {

@@ -8,15 +8,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gotd/td/telegram"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/pkg/consts"
-	transferprog "github.com/iyear/tdl/pkg/prog"
-	"github.com/iyear/tdl/pkg/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -93,6 +89,7 @@ func newArchive(f *archiveFlags) *cobra.Command {
 		return tRunArchive(cmd.Context(), f.resume, cmd.ErrOrStderr(), func(ctx context.Context, c *telegram.Client, kv storage.Storage) (rerr error) {
 			var err error
 			source := transport.New(ctx, c, kv, pool, threads, viper.GetDuration(consts.FlagReconnectTimeout), since, until)
+			source.DownloadTimeout = viper.GetDuration(flagDownloadTimeout)
 			defer func() { rerr = errors.Join(rerr, source.Close(rerr == nil)) }()
 			source.DownloadCustomEmoji = slices.Contains(f.media, "stickers")
 			if err := source.Identity(ctx); err != nil {
@@ -165,68 +162,25 @@ func newArchive(f *archiveFlags) *cobra.Command {
 			for _, warning := range source.Warnings {
 				fmt.Fprintln(cmd.ErrOrStderr(), "Discovery:", warning)
 			}
-			progress := transferprog.New(utils.Byte.FormatBinaryBytes)
-			progress.SetOutputWriter(cmd.ErrOrStderr())
-			progress.SetNumTrackersExpected(1)
-			tracker := transferprog.AppendTracker(progress, utils.Byte.FormatBinaryBytes, "Telegram archive", 0)
-			tracker.Start()
-			var messages, files, active atomic.Int64
-			var expectedMu sync.Mutex
-			var expectedBytes int64
-			updateMessage := func() {
-				tracker.UpdateMessage(fmt.Sprintf("Archive · %d messages · %d files · %d active", messages.Load(), files.Load(), active.Load()))
-			}
-			opts.Progress = func(n int) {
-				messages.Add(int64(n))
-				updateMessage()
-			}
-			opts.OnTransfer = func(event archive.TransferEvent) {
-				switch event.Kind {
-				case archive.TransferStarted:
-					files.Add(1)
-					active.Add(1)
-					if event.File.Size > 0 {
-						expectedMu.Lock()
-						expectedBytes += event.File.Size
-						tracker.UpdateTotal(expectedBytes + 1)
-						expectedMu.Unlock()
-					}
-					updateMessage()
-				case archive.TransferProgressed:
-					tracker.Increment(event.Delta)
-				case archive.TransferFinished:
-					active.Add(-1)
-					updateMessage()
-				}
-			}
-			go progress.Render()
-			for !progress.IsRenderInProgress() {
-				time.Sleep(time.Millisecond)
-			}
+			progress := newBackupProgress(cmd.ErrOrStderr())
+			opts.OnPlan = progress.setPlan
+			opts.OnTransfer = progress.transfer
 			report, batchErr := archive.RunBatch(ctx, source, f.output, chats, opts, source.Warnings)
-			if len(report.Warnings) != len(source.Warnings) {
+			newWarnings := len(report.Warnings) != len(source.Warnings)
+			if newWarnings {
 				report.Warnings = source.Warnings
 				batchErr = errors.Join(batchErr, archive.WriteData(filepath.Join(f.output, "run-report.json"), report))
+			}
+			resultErr := errors.Join(batchErr, err, ctx.Err())
+			progress.finish(resultErr)
+			if newWarnings {
 				for _, warning := range source.Warnings {
 					fmt.Fprintln(cmd.ErrOrStderr(), "Export:", warning)
 				}
 			}
-			resultErr := errors.Join(batchErr, err)
-			if resultErr != nil {
-				tracker.MarkAsErrored()
-			} else {
-				tracker.UpdateTotal(tracker.Value())
-				tracker.MarkAsDone()
-			}
-			transferprog.Wait(context.Background(), progress)
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
 			for _, entry := range report.Chats {
 				if entry.Error != "" {
 					fmt.Fprintf(cmd.ErrOrStderr(), "%s: failed: %s\n", entry.Chat.Name, entry.Error)
-				} else {
-					fmt.Fprintf(cmd.OutOrStdout(), "%s: %d messages, %d output file(s)\n", entry.Chat.Name, entry.Stats.Messages, len(entry.Paths))
 				}
 			}
 			return resultErr
@@ -242,7 +196,7 @@ func newArchive(f *archiveFlags) *cobra.Command {
 	flags.StringSliceVar(&f.mimes, "mime", nil, "MIME filters, such as application/pdf or video/*")
 	flags.Int64Var(&f.minFile, "min-file-size", 0, "minimum media file size in bytes (inclusive)")
 	flags.BoolVar(&f.onlyMedia, "only-media", false, "include only messages with a file matching all download filters")
-	flags.StringSliceVarP(&f.chats, "chat", "c", nil, "chat usernames, joined-dialog names, URLs or IDs (repeat or comma-separate; defaults to me)")
+	flags.StringSliceVarP(&f.chats, "chat", "c", nil, "chat display names, @usernames, URLs or IDs (repeat or comma-separate; defaults to me)")
 	flags.StringVar(&f.exportName, "export-name", "", "custom display name and folder label for one selected chat (defaults to its username for new folders)")
 	flags.BoolVar(&f.all, "all", false, "archive account dialogs selected by --types")
 	flags.StringSliceVar(&f.types, "types", []string{"personal", "bots", "groups", "channels"}, "chat types: "+strings.Join(transport.ChatTypes, ", "))
