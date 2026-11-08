@@ -9,7 +9,7 @@ import (
 	tgclient "github.com/gotd/td/telegram"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
-	"ta/internal/archive"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 )
 
 func TestTakeoutRangesWrapAndPaginate(t *testing.T) {

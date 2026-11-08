@@ -2,8 +2,8 @@
 
 The implementation follows Telegram's [takeout procedure](https://core.telegram.org/api/takeout)
 and [Desktop v7.4.1's JSON serializer](https://github.com/telegramdesktop/tdesktop/blob/v7.4.1/Telegram/SourceFiles/export/output/export_output_json.cpp).
-ta uses the pinned v0.20.4 transfer core and compatible gotd/td v0.140.0 transport
-(Telegram layer 222). These dependencies must be updated together.
+ta uses the pinned v0.20.4 transfer core and compatible gotd/td v0.145.1 transport
+(Telegram layer 225). These dependencies must be updated together.
 
 The HTML reader uses Desktop v7.4.1's original CSS, JavaScript and icons with its
 export layout: header, avatars, grouped messages, date separators, attachment

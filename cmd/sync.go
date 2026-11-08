@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mo1ein/TelegramArchive/internal/archive"
+	"github.com/mo1ein/TelegramArchive/internal/schedule"
+	transport "github.com/mo1ein/TelegramArchive/internal/telegram"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	bolt "go.etcd.io/bbolt"
-	"ta/internal/archive"
-	"ta/internal/schedule"
-	transport "ta/internal/telegram"
 )
 
 type backupComponent struct {

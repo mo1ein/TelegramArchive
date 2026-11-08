@@ -12,10 +12,10 @@ import (
 	"github.com/gotd/td/telegram"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/pkg/consts"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
+	transport "github.com/mo1ein/TelegramArchive/internal/telegram"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"ta/internal/archive"
-	transport "ta/internal/telegram"
 )
 
 func NewAccount() *cobra.Command {

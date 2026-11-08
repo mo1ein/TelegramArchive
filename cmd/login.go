@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"github.com/mo1ein/TelegramArchive/core/logctx"
+	"github.com/mo1ein/TelegramArchive/login"
 	"github.com/spf13/cobra"
-	"ta/core/logctx"
-	"ta/login"
 )
 
 func NewLogin() *cobra.Command {

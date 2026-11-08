@@ -1,21 +1,25 @@
 GO ?= go
-BIN ?= bin/ta
+BIN ?= bin/ta$(shell $(GO) env GOEXE)
 ARGS ?= --help
 
-.PHONY: help build build-manual run test race vet bench
+.PHONY: help build build-manual install run test race vet bench
 help:
-	@echo "make build        Build bin/ta"
+	@echo "make install      Install ta into GOBIN (or GOPATH/bin)"
+	@echo "make build        Build $(BIN)"
 	@echo "make run ARGS='archive --all --types channels --format both'"
 	@echo "make test race vet bench"
-	@echo "./bin/ta sync --everything --every 6h --format both  Recurring incremental backups"
+	@echo "ta sync --everything --every 6h --format both  Recurring incremental backups"
 
 build:
-	$(GO) build -trimpath -o $(BIN) .
+	$(GO) build -trimpath -o "$(BIN)" ./cmd/ta
 
 build-manual: build
 
+install:
+	$(GO) install -trimpath ./cmd/ta
+
 run: build
-	./$(BIN) $(ARGS)
+	"./$(BIN)" $(ARGS)
 
 test:
 	$(GO) test ./...

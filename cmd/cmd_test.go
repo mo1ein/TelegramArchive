@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"ta/internal/archive"
 )
 
 func TestArchiveIgnoresConfigurationFiles(t *testing.T) {

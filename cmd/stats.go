@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 	"github.com/spf13/cobra"
-	"ta/internal/archive"
 )
 
 func NewStats() *cobra.Command {

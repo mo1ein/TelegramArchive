@@ -7,7 +7,7 @@ import (
 	"github.com/gotd/td/telegram/message/peer"
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
-	"ta/internal/archive"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 )
 
 func peerKey(p tg.PeerClass) string {

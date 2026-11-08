@@ -5,7 +5,7 @@ import (
 	"github.com/gotd/td/bin"
 	tgclient "github.com/gotd/td/telegram"
 	"github.com/gotd/td/tg"
-	"ta/internal/archive"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 	"testing"
 )
 

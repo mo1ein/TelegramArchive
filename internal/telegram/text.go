@@ -8,7 +8,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/gotd/td/tg"
-	"ta/internal/archive"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 )
 
 // Telegram uses UTF-16 code units for entity offsets, including surrogate pairs.

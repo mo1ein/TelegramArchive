@@ -10,6 +10,8 @@
 
 ### Added
 
+- Install ta with `go install github.com/mo1ein/TelegramArchive/cmd/ta@latest`
+  or `make install` from a local checkout.
 - Incremental JSON and offline HTML chat exports with local media, checkpoints,
   statistics, date/size/type filters and joined-dialog discovery.
 - Separate account backups, including Saved Messages and selectable account data.
@@ -17,6 +19,11 @@
   protection against overlapping runs of the same job.
 - Telegram Desktop export assets and formats; supported coverage and remaining
   differences are documented in `docs/desktop-compatibility.md`.
+
+### Fixed
+
+- Convert poll answer variants from gotd v0.145.1 so the CLI builds with the
+  updated Telegram dependency.
 
 ### Removed
 

@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 	"github.com/spf13/cobra"
-	"ta/internal/archive"
 )
 
 func NewRender() *cobra.Command {

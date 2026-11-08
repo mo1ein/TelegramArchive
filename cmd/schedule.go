@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mo1ein/TelegramArchive/internal/schedule"
 	"github.com/spf13/cobra"
-	"ta/internal/schedule"
 )
 
 func NewSchedule() *cobra.Command {

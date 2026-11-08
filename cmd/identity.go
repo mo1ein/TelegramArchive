@@ -8,9 +8,9 @@ import (
 	tdclient "github.com/gotd/td/telegram"
 	"github.com/iyear/tdl/core/storage"
 	sessionkv "github.com/iyear/tdl/pkg/kv"
+	archiveTelegram "github.com/mo1ein/TelegramArchive/internal/telegram"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	archiveTelegram "ta/internal/telegram"
 )
 
 func wrapLoginIdentity(root *cobra.Command) {

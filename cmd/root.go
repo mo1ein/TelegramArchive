@@ -13,6 +13,7 @@ func New() *cobra.Command {
 	root := upstreamcmd.New()
 	root.Use = "ta"
 	root.Short = "Back up Telegram chats and account data as JSON or offline HTML"
+	root.Version = version()
 	for _, command := range root.Commands() {
 		if command.Name() == "version" || command.Name() == "recover" {
 			root.RemoveCommand(command)

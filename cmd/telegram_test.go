@@ -18,8 +18,8 @@ import (
 	fasterrors "github.com/go-faster/errors"
 	"github.com/gotd/td/tdsync"
 	"github.com/gotd/td/tgerr"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 	"go.uber.org/zap"
-	"ta/internal/archive"
 )
 
 func TestRetryTelegramTransportFailures(t *testing.T) {

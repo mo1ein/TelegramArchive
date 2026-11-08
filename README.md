@@ -18,14 +18,35 @@ Inspired by [tdl](https://github.com/iyear/tdl), ta uses its transfer and sessio
 - Incremental sync, refresh and cron schedules.
 - Offline rendering, statistics, uploads and forwarding.
 
-## Quick start
+## Installation
 
-Build with Go 1.25.8 or newer:
+With Go 1.25.8 or newer installed, run:
 
 ```sh
-make build
-./bin/ta login -T qr                  # use -T code for phone/code login
-./bin/ta archive --all --types channels --media all --format both
+go install github.com/mo1ein/TelegramArchive/cmd/ta@latest
+ta --help
+```
+
+Run the same `go install` command to update ta. Go installs the binary into
+`GOBIN`, or `GOPATH/bin` when `GOBIN` is unset. If your shell cannot find
+`ta`, add that directory to your PATH. For the default macOS/Linux setup:
+
+```sh
+export PATH="$(go env GOPATH)/bin:$PATH"
+```
+
+Add the export line to `~/.zshrc` or `~/.bashrc` to keep it in new terminals.
+On Windows, add the Go binary directory to your user `Path`.
+
+To install a local checkout, including unpublished changes, run
+`go install ./cmd/ta` or `make install` from the repository root.
+`make build` remains available for a local `bin/ta` binary.
+
+## Quick start
+
+```sh
+ta login -T qr                  # use -T code for phone/code login
+ta archive --all --types channels --media all --format both
 ```
 
 This exports every joined channel, including private channels and archived dialogs.
@@ -36,21 +57,21 @@ Resume is on by default. Rerun the same command to continue or fetch new message
 
 ```sh
 # A private group by name; usernames, URLs and IDs also work.
-./bin/ta archive --chat "Book Club" --media all
+ta archive --chat "Book Club" --media all
 
 # PDF/ZIP files from joined channels, with date and size limits.
-./bin/ta archive --all --types channels --media documents --extensions pdf,zip \
+ta archive --all --types channels --media documents --extensions pdf,zip \
   --since 2026-01-01 --until 2026-02-01 --min-file-size 1024 \
   --max-file-size 104857600 --format html
 
 # Account data, including Saved Messages, in a separate account directory.
-./bin/ta account --include all --media all --format both
+ta account --include all --media all --format both
 
 # Sync all chats and account data once.
-./bin/ta sync --everything --format both
+ta sync --everything --format both
 
 # Back up now, then let system cron sync this channel every six hours.
-./bin/ta cron add my-channel --chat "channel_username" --every 6h \
+ta cron add my-channel --chat "channel_username" --every 6h \
   --media all --format both --output ./data --run-now
 ```
 
@@ -82,4 +103,4 @@ Click a preview to enlarge it.
 | [Desktop export coverage](docs/desktop-compatibility.md) | Supported formats, fields and API limits |
 | [Contributing](CONTRIBUTING.md) | Development workflow and privacy checks |
 
-Run `./bin/ta --help` or `./bin/ta <command> --help` for command options.
+Run `ta --help` or `ta <command> --help` for command options.

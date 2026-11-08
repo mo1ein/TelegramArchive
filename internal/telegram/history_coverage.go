@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gotd/td/tg"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 	"slices"
-	"ta/internal/archive"
 )
 
 func (s *Source) LeftDialogs(ctx context.Context, types []string) ([]archive.Chat, error) {

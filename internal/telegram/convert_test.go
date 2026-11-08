@@ -31,6 +31,43 @@ func TestOutgoingPrivateSenderAndCaption(t *testing.T) {
 	}
 }
 
+func TestPollAnswerVariantsPreserveTextAndVotes(t *testing.T) {
+	item := Convert(&tg.Message{
+		ID: 1,
+		Media: &tg.MessageMediaPoll{
+			Poll: tg.Poll{
+				Question: tg.TextWithEntities{Text: "Pick one"},
+				Answers: []tg.PollAnswerClass{
+					&tg.PollAnswer{Text: tg.TextWithEntities{Text: "First"}, Option: []byte{1}},
+					&tg.InputPollAnswer{Text: tg.TextWithEntities{Text: "Draft"}},
+					&tg.PollAnswer{Text: tg.TextWithEntities{Text: "Second"}, Option: []byte{2}},
+				},
+			},
+			Results: tg.PollResults{
+				TotalVoters: 3,
+				Results: []tg.PollAnswerVoters{
+					{Option: []byte{2}, Voters: 2, Chosen: true, Correct: true},
+					{Option: []byte{1}, Voters: 1},
+				},
+			},
+		},
+	}, peer.Entities{}, 0)
+	poll := item.Message.Poll.(map[string]any)
+	answers := poll["answers"].([]map[string]any)
+	if len(answers) != 3 || poll["question"] != "Pick one" || poll["total_voters"] != 3 {
+		t.Fatalf("poll metadata changed: %+v", item.Message.Poll)
+	}
+	if answers[0]["text"] != "First" || answers[0]["voters"] != 1 || answers[0]["chosen"] != false {
+		t.Fatalf("first answer lost its results: %+v", answers[0])
+	}
+	if answers[1]["text"] != "Draft" || answers[1]["voters"] != 0 || answers[1]["chosen"] != false {
+		t.Fatalf("input-only answer lost its text or gained votes: %+v", answers[1])
+	}
+	if answers[2]["text"] != "Second" || answers[2]["voters"] != 2 || answers[2]["chosen"] != true || answers[2]["correct"] != true {
+		t.Fatalf("second answer lost its matched results: %+v", answers[2])
+	}
+}
+
 func TestEditedAttachmentHasDifferentCachePath(t *testing.T) {
 	doc := &tg.Document{ID: 9, Size: 42, Attributes: []tg.DocumentAttributeClass{&tg.DocumentAttributeFilename{FileName: "same.txt"}}}
 	m := &tg.Message{ID: 1, Media: &tg.MessageMediaDocument{Document: doc}}
