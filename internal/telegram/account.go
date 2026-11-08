@@ -12,7 +12,7 @@ import (
 	"github.com/gotd/td/telegram/downloader"
 	"github.com/gotd/td/telegram/message/peer"
 	"github.com/gotd/td/tg"
-	"ta/internal/archive"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 )
 
 var AccountKinds = []string{"personal_info", "contacts", "frequent_contacts", "profile_photos", "stories", "saved_messages", "sessions", "web_sessions", "other_data"}

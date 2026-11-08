@@ -9,7 +9,7 @@ import (
 
 	"github.com/gotd/td/telegram/message/peer"
 	"github.com/gotd/td/tg"
-	"ta/internal/archive"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 )
 
 func (s *Source) accountMedia(ctx context.Context, root, kind string, opts archive.Options) (any, []string, error) {

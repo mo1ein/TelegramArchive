@@ -12,10 +12,10 @@ import (
 	"github.com/iyear/tdl/app/migrate"
 	upstreamcmd "github.com/iyear/tdl/cmd"
 	upstreamconsts "github.com/iyear/tdl/pkg/consts"
+	"github.com/mo1ein/TelegramArchive/consts"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"ta/consts"
 )
 
 func configureProductPaths() {

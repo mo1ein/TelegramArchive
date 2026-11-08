@@ -2,12 +2,15 @@
 
 [Project README](../README.md)
 
-Build with `make build`. The project examples use `./bin/ta`.
-The command guides use `ta`; add the project's `bin` directory to your PATH if needed:
+Install ta with Go 1.25.8 or newer:
 
 ```sh
-export PATH="$PWD/bin:$PATH"
+go install github.com/mo1ein/TelegramArchive/cmd/ta@latest
 ```
+
+The command guides use the installed `ta` command.
+See [installation and PATH setup](../README.md#installation), or run
+`go install ./cmd/ta` from a checkout to install unpublished local changes.
 
 ## Archiving and backups
 

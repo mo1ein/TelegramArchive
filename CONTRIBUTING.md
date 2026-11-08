@@ -8,6 +8,10 @@ request. Discuss larger features in an issue before implementing them.
 
 ## Build and verify
 
+Install the current checkout with `go install ./cmd/ta` or `make install`.
+Add `GOBIN` (or `GOPATH/bin`) to PATH to use `ta` from any directory.
+`make build` produces a local `bin/ta` binary.
+
 ```sh
 make build
 make test

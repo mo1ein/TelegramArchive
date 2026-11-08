@@ -8,7 +8,7 @@ For account data and scheduled syncs, see [Backups](backups.md).
 ## Export all joined channels
 
 ```sh
-./bin/ta archive --all --types channels --media all --format both
+ta archive --all --types channels --media all --format both
 ```
 
 This exports every joined channel, including private channels and archived dialogs.
@@ -41,34 +41,34 @@ Repeat `--chat` or separate values with commas.
 
 ```sh
 # Usernames and Saved Messages.
-./bin/ta archive --chat me,telegram --media all
+ta archive --chat me,telegram --media all
 
 # Private groups work by name. Use ta chat ls to find their IDs.
-./bin/ta archive --chat "Book Club" --media all
-./bin/ta archive --chat=-1001234567890 --media none
+ta archive --chat "Book Club" --media all
+ta archive --chat=-1001234567890 --media none
 
 # Custom display name and folder label for one chat.
-./bin/ta archive --chat telegram --export-name "My reference archive"
+ta archive --chat telegram --export-name "My reference archive"
 
 # All matching chats, including private groups and channels.
-./bin/ta archive --all --types personal,bots,groups,channels
-./bin/ta archive --all --types contacts,private_channels
+ta archive --all --types personal,bots,groups,channels
+ta archive --all --types contacts,private_channels
 
 # PDF/ZIP files from every joined channel, with date and size limits.
-./bin/ta archive --all --types channels --media documents --extensions pdf,zip \
+ta archive --all --types channels --media documents --extensions pdf,zip \
   --since 2026-01-01 --until 2026-02-01 --min-file-size 1024 \
   --max-file-size 104857600 --format html
 
 # MIME filtering; omit messages without a matching file.
-./bin/ta archive --all --types channels --media all --mime 'video/*' \
+ta archive --all --types channels --media all --mime 'video/*' \
   --only-media --format both
 
 # Photos/videos in a date range, with JSON split into 50 MiB parts.
-./bin/ta archive --chat me --since 2026-01-01 --until 2026-02-01 \
+ta archive --chat me --since 2026-01-01 --until 2026-02-01 \
   --media photos,videos --max-file-size 104857600 --part-size 52428800
 
 # Proxy and saved login namespace.
-./bin/ta --proxy socks5://127.0.0.1:1080 -n personal archive --chat me
+ta --proxy socks5://127.0.0.1:1080 -n personal archive --chat me
 ```
 
 Name matching ignores case and searches main and archived dialogs.
@@ -125,8 +125,8 @@ An interrupted refresh continues from its last completed page.
 For a fresh snapshot, use `--resume=false`. Keep older snapshots in a separate output directory.
 
 ```sh
-./bin/ta archive --all --types channels --media all --format both --refresh
-./bin/ta archive --chat me --resume=false --media photos,documents
+ta archive --all --types channels --media all --format both --refresh
+ta archive --chat me --resume=false --media photos,documents
 ```
 
 Changing media, date, size, file filters or takeout mode requires a rebuild or a new output directory.
@@ -147,7 +147,7 @@ ta reads history in pages of 100 messages. Downloads run in parallel:
 | `--pool` | `8` | Connections per Telegram data center |
 
 ```sh
-./bin/ta -l 4 -t 4 --pool 8 archive --chat me --media all
+ta -l 4 -t 4 --pool 8 archive --chat me --media all
 ```
 
 The progress bar shows transferred bytes, processed messages and active downloads.
@@ -186,9 +186,9 @@ A message larger than the part budget gets its own part.
 Rebuild JSON or HTML from a local checkpoint, without contacting Telegram:
 
 ```sh
-./bin/ta render data/ChatExport_channel_123 --format html --html-page-size 500
-./bin/ta render data/ChatExport_channel_123 --format both
-./bin/ta render data/AccountExport_123 --format both
+ta render data/ChatExport_channel_123 --format html --html-page-size 500
+ta render data/ChatExport_channel_123 --format both
+ta render data/AccountExport_123 --format both
 ```
 
 `render` also updates older checkpoints to the current presentation and JSON schema.
@@ -200,8 +200,8 @@ Live export parity with Telegram Desktop has not been verified.
 ## Statistics
 
 ```sh
-./bin/ta stats data/ChatExport_user_123/result.json
-./bin/ta stats data/ChatExport_user_123/result_part*.json > combined-statistics.json
+ta stats data/ChatExport_user_123/result.json
+ta stats data/ChatExport_user_123/result_part*.json > combined-statistics.json
 ```
 
 `stats` reads Desktop chat JSON, ta exports and legacy Python exports offline.

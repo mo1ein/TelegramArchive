@@ -3,8 +3,8 @@ package telegram
 import (
 	"github.com/gotd/td/telegram/message/peer"
 	"github.com/gotd/td/tg"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 	"strings"
-	"ta/internal/archive"
 )
 
 func serviceAction(v *tg.MessageService, e peer.Entities, selfID int64, m *archive.Message) []archive.File {

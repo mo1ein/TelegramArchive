@@ -13,14 +13,14 @@ A normal chat export does not start an account backup.
 
 ```sh
 # All account sections and their media.
-./bin/ta account --include all --media all --format both
+ta account --include all --media all --format both
 
 # Selected sections.
-./bin/ta account --include saved_messages,contacts,profile_photos,stories \
+ta account --include saved_messages,contacts,profile_photos,stories \
   --media all --format html
 
 # Filters also apply to Saved Messages, profile photos and stories.
-./bin/ta account --include saved_messages --media documents --extensions pdf \
+ta account --include saved_messages --media documents --extensions pdf \
   --since 2026-01-01 --max-file-size 104857600 --format both
 ```
 
@@ -47,16 +47,16 @@ Install a real cron job using ta commands:
 
 ```sh
 # Back up now, then sync every six hours.
-./bin/ta cron add my-channel --chat "channel_username" --every 6h \
+ta cron add my-channel --chat "channel_username" --every 6h \
   --media all --format both --output ./data --run-now
 
 # All chats, media and separate account data, once a day.
-./bin/ta cron add everything --everything --every 24h --format both --run-now
+ta cron add everything --everything --every 24h --format both --run-now
 
-./bin/ta cron list
-./bin/ta cron logs my-channel
-./bin/ta cron run my-channel
-./bin/ta cron remove my-channel
+ta cron list
+ta cron logs my-channel
+ta cron run my-channel
+ta cron remove my-channel
 ```
 
 `cron add` installs or updates a named job in your user crontab. Other cron entries stay intact.
@@ -83,22 +83,22 @@ With `--all`, each cycle also discovers newly joined chats.
 
 ```sh
 # Everything, every six hours.
-./bin/ta sync --everything --every 6h --format both
+ta sync --everything --every 6h --format both
 
 # Joined channels, with file filters.
-./bin/ta sync --all --types channels --extensions pdf,mp4 \
+ta sync --all --types channels --extensions pdf,mp4 \
   --max-file-size 104857600 --every 1h --format both
 
 # Chats plus selected account sections.
-./bin/ta sync --all --media all --account-include contacts,saved_messages \
+ta sync --all --media all --account-include contacts,saved_messages \
   --every 6h --format both
 
 # Account sections only.
-./bin/ta sync --chats=false --account-include contacts,profile_photos \
+ta sync --chats=false --account-include contacts,profile_photos \
   --media all --every 24h --format both
 
 # One backup cycle.
-./bin/ta sync --everything --format both
+ta sync --everything --format both
 ```
 
 A bare `sync` selects all chats matching `--types`.
@@ -127,7 +127,7 @@ Change filters through a one-time rebuild or a new output directory.
 To run it in the background:
 
 ```sh
-nohup ./bin/ta sync --everything --every 6h --format both --output ./data \
+nohup ta sync --everything --every 6h --format both --output ./data \
   > backup.log 2>&1 &
 ```
 

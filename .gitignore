@@ -1,5 +1,9 @@
 # Go builds, test binaries, profiles and local tooling
 /bin/
+/ta
+/ta.exe
+/TelegramArchive
+/TelegramArchive.exe
 /build/
 /dist/
 *.test

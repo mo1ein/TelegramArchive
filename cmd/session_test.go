@@ -15,10 +15,10 @@ import (
 	"time"
 
 	sessionkv "github.com/iyear/tdl/pkg/kv"
+	"github.com/mo1ein/TelegramArchive/consts"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.etcd.io/bbolt"
-	"ta/consts"
 )
 
 func TestSessionLockErrorsPreserveCauses(t *testing.T) {

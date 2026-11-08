@@ -20,8 +20,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"ta/internal/archive"
-	transport "ta/internal/telegram"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
+	transport "github.com/mo1ein/TelegramArchive/internal/telegram"
 )
 
 type archiveFlags struct {

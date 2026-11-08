@@ -9,12 +9,12 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/mo1ein/TelegramArchive/consts"
+	managedcron "github.com/mo1ein/TelegramArchive/internal/cron"
+	"github.com/mo1ein/TelegramArchive/internal/schedule"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"ta/consts"
-	managedcron "ta/internal/cron"
-	"ta/internal/schedule"
 )
 
 func NewCron() *cobra.Command {

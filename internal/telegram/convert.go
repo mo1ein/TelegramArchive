@@ -15,7 +15,7 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/iyear/tdl/core/tmedia"
 
-	"ta/internal/archive"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 )
 
 func date(ts int) string { return time.Unix(int64(ts), 0).UTC().Format("2006-01-02T15:04:05") }
@@ -192,13 +192,16 @@ func Convert(raw tg.NotEmptyMessage, e peer.Entities, selfID int64) archive.Item
 		case *tg.MessageMediaPoll:
 			answers := make([]map[string]any, 0, len(md.Poll.Answers))
 			for _, answer := range md.Poll.Answers {
-				text, _ := convertText(answer.Text.Text, answer.Text.Entities)
+				answerText := answer.GetText()
+				text, _ := convertText(answerText.Text, answerText.Entities)
 				a := map[string]any{"text": text, "voters": 0, "chosen": false}
-				for _, r := range md.Results.Results {
-					if bytes.Equal(answer.Option, r.Option) {
-						a["voters"] = r.Voters
-						a["chosen"] = r.Chosen
-						a["correct"] = r.Correct
+				if choice, ok := answer.(*tg.PollAnswer); ok {
+					for _, r := range md.Results.Results {
+						if bytes.Equal(choice.Option, r.Option) {
+							a["voters"] = r.Voters
+							a["chosen"] = r.Chosen
+							a["correct"] = r.Correct
+						}
 					}
 				}
 				answers = append(answers, a)

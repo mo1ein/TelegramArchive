@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	managedcron "github.com/mo1ein/TelegramArchive/internal/cron"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	managedcron "ta/internal/cron"
 )
 
 type testCronTable struct {

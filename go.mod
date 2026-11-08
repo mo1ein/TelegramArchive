@@ -1,4 +1,4 @@
-module ta
+module github.com/mo1ein/TelegramArchive
 
 go 1.25.8
 

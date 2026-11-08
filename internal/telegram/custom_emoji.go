@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"github.com/gotd/td/tg"
 	"github.com/iyear/tdl/core/tmedia"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 	"strconv"
-	"ta/internal/archive"
 )
 
 func (s *Source) attachCustomEmojis(ctx context.Context, items []archive.Item) error {
