@@ -105,7 +105,21 @@ func (s *Source) accountMedia(ctx context.Context, root, kind string, opts archi
 				items = append(items, item)
 			}
 		}
-		items = archive.FilterItems(items, opts)
+		selected := archive.FilterItems(items, opts)
+		if opts.SummaryRecorder != nil {
+			ids := map[int]bool{}
+			for _, item := range selected {
+				ids[item.Message.ID] = true
+			}
+			for _, item := range items {
+				if !ids[item.Message.ID] {
+					for _, file := range item.Files {
+						opts.SummaryRecorder.Observe(dir, archive.TransferEvent{Kind: archive.TransferFiltered, File: file})
+					}
+				}
+			}
+		}
+		items = selected
 		if err := s.attachCustomEmojis(ctx, items); err != nil {
 			return nil, nil, err
 		}

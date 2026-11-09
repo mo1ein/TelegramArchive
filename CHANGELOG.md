@@ -17,6 +17,9 @@
 - Separate account backups, including Saved Messages and selectable account data.
 - Recurring foreground sync and managed system cron jobs with per-job logs and
   protection against overlapping runs of the same job.
+- Archive and cron job completion summaries with message totals, media outcomes
+  by type, active filters, finish times and elapsed time. Counts are also saved
+  in structured reports and stay accurate across retries and skipped runs.
 - Telegram Desktop export assets and formats; supported coverage and remaining
   differences are documented in `docs/desktop-compatibility.md`.
 
@@ -24,6 +27,9 @@
 
 - Convert poll answer variants from gotd v0.145.1 so the CLI builds with the
   updated Telegram dependency.
+- Continue backups after repeated Telegram timeouts for an optional thumbnail,
+  retaining the original media and reporting the unavailable preview. Existing
+  thumbnail warnings remain visible until a successful refresh replaces them.
 
 ### Removed
 

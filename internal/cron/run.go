@@ -2,11 +2,15 @@ package cron
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"syscall"
 	"time"
 
@@ -16,7 +20,11 @@ import (
 type Runner func(context.Context, Job, io.Writer) error
 
 func Execute(ctx context.Context, job Job, output io.Writer) error {
-	child := exec.CommandContext(ctx, job.Executable, job.Arguments...)
+	args := slices.Clone(job.Arguments)
+	if job.ResultFile != "" {
+		args = append(args, "--result-file="+job.ResultFile)
+	}
+	child := exec.CommandContext(ctx, job.Executable, args...)
 	child.Dir = job.Directory
 	child.Env = os.Environ()
 	for key, value := range job.Environment {
@@ -57,22 +65,55 @@ func Run(ctx context.Context, file string, output io.Writer, execute Runner) err
 	out := io.MultiWriter(log, output)
 	lock, err := bolt.Open(file+".run.lock", 0600, &bolt.Options{Timeout: 50 * time.Millisecond})
 	if errors.Is(err, bolt.ErrTimeout) {
-		fmt.Fprintf(out, "[%s] %s is already running; skipping this tick.\n", time.Now().Format(time.RFC3339), job.Name)
+		fmt.Fprintf(out, "[%s] Skipped job %q | already running; no new backup started.\n", time.Now().Format(time.RFC3339), job.Name)
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 	defer lock.Close()
+	result, err := os.CreateTemp(filepath.Dir(file), ".job-result-*")
+	if err != nil {
+		return err
+	}
+	job.ResultFile = result.Name()
+	result.Close()
+	defer os.Remove(job.ResultFile)
+	job.ResultFile, err = filepath.Abs(job.ResultFile)
+	if err != nil {
+		return err
+	}
+	started := time.Now().UTC()
 	fmt.Fprintf(out, "[%s] Starting cron backup %s\n", time.Now().Format(time.RFC3339), job.Name)
 	err = execute(ctx, job, out)
 	if ctx.Err() != nil {
 		err = ctx.Err()
 	}
+	var report archive.CompletionReport
+	raw, readErr := os.ReadFile(job.ResultFile)
+	if readErr == nil {
+		readErr = json.Unmarshal(raw, &report)
+	}
+	validStatus := slices.Contains([]string{"complete", "complete_with_warnings", "failed", "canceled", "skipped"}, report.Status)
+	if readErr != nil || report.Kind != "backup" || !validStatus {
+		report = archive.CompletionReport{Status: "unknown", Summary: archive.Summary{Error: "child did not provide a valid completion report"}}
+	}
+	if err == nil && (report.Status == "failed" || report.Status == "canceled") {
+		err = fmt.Errorf("backup reported %s: %s", report.Status, report.Error)
+	}
 	if err != nil {
-		fmt.Fprintf(out, "[%s] Backup failed: %v\n", time.Now().Format(time.RFC3339), err)
+		report.Status = "failed"
+	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		report.Status = "canceled"
+	}
+	finished := time.Now().UTC()
+	fmt.Fprint(out, archive.SummaryText(fmt.Sprintf("Finished job %q", job.Name), report.Status, report.Summary, finished, finished.Sub(started)))
+	if report.Status == "skipped" && report.Error != "" {
+		fmt.Fprintln(out, report.Error)
+	}
+	if err != nil {
 		return fmt.Errorf("cron backup %s failed: %w; see %s", job.Name, err, job.Log)
 	}
-	fmt.Fprintf(out, "[%s] Backup complete; future runs reuse these checkpoints.\n", time.Now().Format(time.RFC3339))
 	return nil
 }

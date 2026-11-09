@@ -58,6 +58,14 @@ func (s *Source) ExportAccount(ctx context.Context, dir string, kinds []string, 
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return report, err
 	}
+	if opts.SummaryRecorder == nil {
+		var err error
+		opts.SummaryRecorder, err = archive.NewSummaryRecorder(dir)
+		if err != nil {
+			return report, err
+		}
+		defer opts.SummaryRecorder.Close()
+	}
 	var failures []error
 	seen := map[string]bool{}
 	for _, kind := range kinds {
@@ -99,7 +107,15 @@ func (s *Source) ExportAccount(ctx context.Context, dir string, kinds []string, 
 					}
 				}
 			case "other_data":
+				file := archive.File{Kind: "account_data", Field: "file", Path: "other_data.json"}
 				err = s.otherData(ctx, filepath.Join(dir, "other_data.json"))
+				var size int64
+				if err == nil {
+					if st, e := os.Stat(filepath.Join(dir, file.Path)); e == nil {
+						size = st.Size()
+					}
+				}
+				opts.SummaryRecorder.Observe(dir, archive.TransferEvent{Kind: archive.TransferFinished, File: file, Bytes: size, Err: err})
 				if err == nil {
 					section.Files = []string{"other_data.json"}
 				}
@@ -112,6 +128,13 @@ func (s *Source) ExportAccount(ctx context.Context, dir string, kinds []string, 
 		report.Sections = append(report.Sections, section)
 	}
 	format := opts.Format
+	report.Summary = opts.SummaryRecorder.Total(dir)
+	report.Summary.Filters = archive.SummaryFilters(opts)
+	if count := report.Summary.Totals().Unavailable; count > 0 {
+		report.Warnings = append(report.Warnings, fmt.Sprintf("%d thumbnail(s) unavailable; original media retained. Use --refresh to retry later.", count))
+	} else if count := report.Summary.StoredUnavailableThumbnails; count > 0 {
+		report.Warnings = append(report.Warnings, fmt.Sprintf("Archive retains %d unavailable thumbnail(s); use --refresh to retry later.", count))
+	}
 	if format == "" {
 		format = "json"
 	}

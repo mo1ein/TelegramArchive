@@ -67,6 +67,20 @@ wait for it to finish. Ctrl+C cancels waiting and keeps the installed cron job.
 Automatic cron runs skip a busy output folder, and triggers are also skipped while
 the same job is running. Failed jobs retry at the next scheduled time.
 
+The last line of a completed job starts with `Finished job "NAME"`. It reports
+the result, downloaded/reused/filtered/failed/unavailable file totals, finish time
+and elapsed time. A table above it breaks down media types, and the archive
+summary gives the total messages stored and the new messages added this run.
+`completed with warnings` keeps unavailable thumbnails visible even on later
+incremental runs. A skipped job says `skipped` and does not claim a completed
+backup or reuse counts from a previous run. A failed job retains the work and
+reports the partial results available.
+If a child cannot provide a valid report, the result or counts are marked
+unavailable rather than claiming success or inventing zero counts.
+
+Inspect `backup-report.json` for the structured totals and component outcomes.
+For live results, use `ta cron logs NAME` or `tail -f ~/.ta/cron/NAME.log`.
+
 `--every 6h` means 00:00, 06:00, 12:00 and 18:00 in cron's timezone.
 Use whole minutes that divide an hour, or whole hours that divide a day.
 Examples are `15m`, `1h`, `6h` and `24h`. Use foreground sync for intervals such as `90m`.

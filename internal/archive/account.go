@@ -15,6 +15,8 @@ type AccountSection struct {
 	Error string   `json:"error,omitempty"`
 }
 type AccountReport struct {
+	Summary    Summary          `json:"summary"`
+	Warnings   []string         `json:"warnings,omitempty"`
 	AccountID  int64            `json:"account_id"`
 	ExportedAt time.Time        `json:"exported_at"`
 	Sections   []AccountSection `json:"sections"`
@@ -58,6 +60,7 @@ func plainValue(v any) string {
 // DownloadItems applies the same media filters, cache and integrity checks used
 // by chats to a bounded page of account photos or stories.
 func DownloadItems(ctx context.Context, source Source, dir string, items []Item, opts Options) error {
+	opts = summaryOptions(opts, dir)
 	return downloadPage(ctx, source, dir, items, opts)
 }
 

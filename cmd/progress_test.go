@@ -60,6 +60,27 @@ func TestBackupProgressShowsHistoryScanWork(t *testing.T) {
 	}
 }
 
+func TestBackupProgressExcludesUnavailableThumbnails(t *testing.T) {
+	start := time.Now()
+	p := &backupProgress{started: start, active: map[string]activeTransfer{}}
+	p.setPlan(archive.DownloadPlan{Ready: true, Files: 2, Bytes: 100})
+	thumb := archive.File{Field: "thumbnail", Path: "video_files/thumb.jpg", Size: 20}
+	p.transfer(archive.TransferEvent{Kind: archive.TransferStarted, File: thumb})
+	p.transfer(archive.TransferEvent{Kind: archive.TransferProgressed, File: thumb, Delta: 4})
+	p.transfer(archive.TransferEvent{Kind: archive.TransferFinished, File: thumb, Err: archive.ErrThumbnailUnavailable})
+	video := archive.File{Field: "file", Path: "video_files/movie.mp4", Size: 80}
+	p.transfer(archive.TransferEvent{Kind: archive.TransferStarted, File: video})
+	p.transfer(archive.TransferEvent{Kind: archive.TransferProgressed, File: video, Delta: 40})
+	output := strings.Join(p.lines(start.Add(time.Second), 100), "\n")
+	if !strings.Contains(output, "50.0%") || !strings.Contains(output, "40 B / 80 B") {
+		t.Fatalf("unavailable thumbnail distorted remaining progress:\n%s", output)
+	}
+	p.finished = true
+	if output = strings.Join(p.lines(start.Add(time.Second), 100), "\n"); !strings.Contains(output, "1 thumbnail unavailable") {
+		t.Fatalf("completion hid missing thumbnail:\n%s", output)
+	}
+}
+
 func TestBackupProgressFinishesOnlyAfterArchiveSucceeds(t *testing.T) {
 	start := time.Now()
 	p := &backupProgress{started: start, active: map[string]activeTransfer{}}
@@ -109,5 +130,15 @@ func TestBackupProgressRunsWithArchiveAndWritesPlainLogs(t *testing.T) {
 	text := output.String()
 	if strings.Contains(text, "\x1b") || strings.Count(text, "100.0%") != 1 || !strings.Contains(text, "16 B / 16 B") {
 		t.Fatalf("invalid progress log:\n%s", text)
+	}
+}
+
+func TestBackupProgressKeepsArchiveSummaryVisible(t *testing.T) {
+	var output bytes.Buffer
+	progress := newBackupProgress(&output)
+	progress.print("Finished archive test | completed\nMessages archived: 4 total\n")
+	progress.finish(nil)
+	if text := output.String(); strings.Count(text, "Finished archive test") != 1 || !strings.Contains(text, "Messages archived: 4 total") || strings.Contains(text, "\x1b") {
+		t.Fatalf("summary was lost or corrupted in progress output: %q", text)
 	}
 }

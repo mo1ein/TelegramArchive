@@ -465,6 +465,9 @@ func (s *Source) DownloadWithProgress(ctx context.Context, file archive.File, de
 	if s.takeoutID != 0 {
 		api = tg.NewClient(takeout.Middleware(s.takeoutID).Handle(api.Invoker()))
 	}
+	if file.Field == "thumbnail" {
+		api = thumbnailClient(api)
+	}
 	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return err

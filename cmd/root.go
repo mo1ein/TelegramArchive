@@ -17,6 +17,8 @@ func New() *cobra.Command {
 	root.Use = "ta"
 	root.Short = "Back up Telegram chats and account data as JSON or offline HTML"
 	root.Version = version()
+	root.PersistentFlags().String(flagResultFile, "", "private completion report for a parent backup process")
+	root.PersistentFlags().MarkHidden(flagResultFile)
 	root.PersistentFlags().Duration(flagDownloadTimeout, transport.DefaultDownloadTimeout, "inactivity limit for archive history reads and media transfers; 0 disables")
 	_ = viper.BindPFlag(flagDownloadTimeout, root.PersistentFlags().Lookup(flagDownloadTimeout))
 	for _, command := range root.Commands() {

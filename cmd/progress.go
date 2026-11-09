@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -22,6 +23,11 @@ type activeTransfer struct {
 	order          uint64
 }
 
+type progressMessage struct {
+	text string
+	done chan struct{}
+}
+
 type backupProgress struct {
 	mu                       sync.Mutex
 	started, transferStarted time.Time
@@ -30,15 +36,17 @@ type backupProgress struct {
 	order                    uint64
 	bytes, completeBytes     int64
 	completeFiles            int64
+	unavailableThumbnails    int64
 	finished                 bool
 	colorful                 bool
 	failure                  error
 	stop                     chan error
 	stopped, refresh         chan struct{}
+	messages                 chan progressMessage
 }
 
 func newBackupProgress(output io.Writer) *backupProgress {
-	p := &backupProgress{started: time.Now(), active: map[string]activeTransfer{}, stop: make(chan error), stopped: make(chan struct{}), refresh: make(chan struct{}, 1)}
+	p := &backupProgress{started: time.Now(), active: map[string]activeTransfer{}, stop: make(chan error), stopped: make(chan struct{}), refresh: make(chan struct{}, 1), messages: make(chan progressMessage)}
 	fd, terminal := 0, false
 	if file, ok := output.(interface{ Fd() uintptr }); ok {
 		fd = int(file.Fd())
@@ -77,6 +85,14 @@ func newBackupProgress(output io.Writer) *backupProgress {
 		render()
 		for {
 			select {
+			case message := <-p.messages:
+				if terminal && drawn {
+					fmt.Fprint(output, "\x1b[3A\x1b[J")
+				}
+				fmt.Fprint(output, message.text)
+				drawn = false
+				render()
+				close(message.done)
 			case err := <-p.stop:
 				p.mu.Lock()
 				p.finished, p.failure = true, err
@@ -91,6 +107,12 @@ func newBackupProgress(output io.Writer) *backupProgress {
 		}
 	}()
 	return p
+}
+
+func (p *backupProgress) print(message string) {
+	request := progressMessage{text: message, done: make(chan struct{})}
+	p.messages <- request
+	<-request.done
 }
 
 func (p *backupProgress) setPlan(plan archive.DownloadPlan) {
@@ -129,6 +151,14 @@ func (p *backupProgress) transfer(event archive.TransferEvent) {
 		if event.Err == nil {
 			p.completeFiles++
 			p.completeBytes += t.received
+		} else if event.File.Field == "thumbnail" && errors.Is(event.Err, archive.ErrThumbnailUnavailable) {
+			p.unavailableThumbnails++
+			p.bytes = max(0, p.bytes-t.received)
+			p.plan.Bytes = max(0, p.plan.Bytes-t.size)
+			p.plan.Files = max(0, p.plan.Files-1)
+			if t.size <= 0 {
+				p.plan.UnknownFiles = max(0, p.plan.UnknownFiles-1)
+			}
 		}
 		delete(p.active, key)
 	}
@@ -181,6 +211,13 @@ func (p *backupProgress) lines(now time.Time, width int) []string {
 			label = "Backup failed"
 		} else {
 			percent = 100
+			if p.unavailableThumbnails > 0 {
+				label += fmt.Sprintf(" · %d thumbnail", p.unavailableThumbnails)
+				if p.unavailableThumbnails != 1 {
+					label += "s"
+				}
+				label += " unavailable"
+			}
 		}
 	}
 	elapsed := max(0, now.Sub(p.started))

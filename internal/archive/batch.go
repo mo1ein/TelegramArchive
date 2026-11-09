@@ -9,20 +9,25 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
 )
 
 type ChatExport struct {
-	Chat  Chat     `json:"chat"`
-	Paths []string `json:"files,omitempty"`
-	Stats Stats    `json:"statistics"`
-	Error string   `json:"error,omitempty"`
-	Link  string   `json:"-"`
+	Started  time.Time `json:"started_at"`
+	Finished time.Time `json:"finished_at"`
+	Summary  Summary   `json:"summary"`
+	Chat     Chat      `json:"chat"`
+	Paths    []string  `json:"files,omitempty"`
+	Stats    Stats     `json:"statistics"`
+	Error    string    `json:"error,omitempty"`
+	Link     string    `json:"-"`
 }
 
 type RunReport struct {
+	Summary  Summary      `json:"summary"`
 	Started  time.Time    `json:"started_at"`
 	Finished time.Time    `json:"finished_at"`
 	Chats    []ChatExport `json:"chats"`
@@ -31,13 +36,22 @@ type RunReport struct {
 
 // RunBatch finishes independent chats after a failure, then returns all errors.
 func RunBatch(ctx context.Context, source Source, root string, chats []Chat, opts Options, warnings []string) (RunReport, error) {
-	report := RunReport{Started: time.Now().UTC(), Warnings: warnings}
+	report := RunReport{Started: time.Now().UTC(), Warnings: slices.Clone(warnings)}
+	opts.unavailableThumbnails = &sync.Map{}
 	var failures []error
 	if err := opts.Validate(); err != nil {
 		return report, err
 	}
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return report, err
+	}
+	if opts.SummaryRecorder == nil {
+		var err error
+		opts.SummaryRecorder, err = NewSummaryRecorder(root)
+		if err != nil {
+			return report, err
+		}
+		defer opts.SummaryRecorder.Close()
 	}
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -74,11 +88,16 @@ func RunBatch(ctx context.Context, source Source, root string, chats []Chat, opt
 			failures = append(failures, fmt.Errorf("unsafe chat key"))
 			continue
 		}
-		record := ChatExport{Chat: chat}
+		record := ChatExport{Chat: chat, Started: time.Now().UTC(), Summary: Summary{HasMessages: true, MediaKnown: true, Media: map[string]MediaCounts{}, Filters: SummaryFilters(opts)}}
 		name, err := exportDirectory(chat, opts.ExportName, directories)
 		if err != nil {
 			record.Error = err.Error()
+			record.Finished = time.Now().UTC()
+			report.Summary.Add(record.Summary)
 			report.Chats = append(report.Chats, record)
+			if opts.OnChatFinished != nil {
+				opts.OnChatFinished(record)
+			}
 			failures = append(failures, fmt.Errorf("%s: %w", chat.Name, err))
 			continue
 		}
@@ -91,6 +110,12 @@ func RunBatch(ctx context.Context, source Source, root string, chats []Chat, opt
 		}
 		if err == nil {
 			result, err = Run(ctx, source, dir, chat, chatOpts)
+		}
+		record.Summary = result.Summary
+		if !record.Summary.HasMessages {
+			record.Summary = opts.SummaryRecorder.Snapshot(dir)
+			record.Summary.HasMessages = true
+			record.Summary.Filters = SummaryFilters(opts)
 		}
 		if err != nil {
 			record.Error = err.Error()
@@ -108,7 +133,12 @@ func RunBatch(ctx context.Context, source Source, root string, chats []Chat, opt
 				}
 			}
 		}
+		record.Finished = time.Now().UTC()
+		report.Summary.Add(record.Summary)
 		report.Chats = append(report.Chats, record)
+		if opts.OnChatFinished != nil {
+			opts.OnChatFinished(record)
+		}
 		// Recreate a stalled connection before trying the remaining chats.
 		// Permanent per-chat failures still leave other chats independent.
 		var timeout net.Error
@@ -117,6 +147,11 @@ func RunBatch(ctx context.Context, source Source, root string, chats []Chat, opt
 		}
 	}
 	report.Finished = time.Now().UTC()
+	if count := report.Summary.Totals().Unavailable; count > 0 {
+		report.Warnings = append(report.Warnings, fmt.Sprintf("%d thumbnail(s) unavailable after Telegram timeouts; primary media retained. Use --refresh to retry the thumbnails later.", count))
+	} else if count := report.Summary.StoredUnavailableThumbnails; count > 0 {
+		report.Warnings = append(report.Warnings, fmt.Sprintf("Archive retains %d unavailable thumbnail(s); use --refresh to retry later.", count))
+	}
 	if err := writeJSON(filepath.Join(root, "run-report.json"), report); err != nil {
 		failures = append(failures, err)
 	}

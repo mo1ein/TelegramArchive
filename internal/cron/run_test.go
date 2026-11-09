@@ -40,7 +40,7 @@ func TestRunSkipsOverlapAndRetainsPrivateLog(t *testing.T) {
 		t.Fatal("overlap not skipped", err, skipped.String())
 	}
 	data, _ := os.ReadFile(job.Log)
-	if !strings.Contains(string(data), "downloaded new messages") || !strings.Contains(string(data), "Backup complete") {
+	if !strings.Contains(string(data), "downloaded new messages") || !strings.Contains(string(data), "Finished job") {
 		t.Fatal("missing job log")
 	}
 	info, _ := os.Stat(job.Log)
