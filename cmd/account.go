@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gotd/td/telegram"
 	"github.com/iyear/tdl/core/storage"
@@ -74,7 +75,15 @@ func NewAccount() *cobra.Command {
 		if threads < 1 || threads > 64 || pool < 1 || pool > 64 {
 			return fmt.Errorf("threads and pool must be between 1 and 64")
 		}
-		return tRun(cmd.Context(), func(ctx context.Context, c *telegram.Client, kv storage.Storage) (rerr error) {
+		recorder, err := archive.NewSummaryRecorder(f.output)
+		if err != nil {
+			return err
+		}
+		defer recorder.Close()
+		opts.SummaryRecorder = recorder
+		started := time.Now().UTC()
+		var finalReport archive.AccountReport
+		runErr := tRun(cmd.Context(), func(ctx context.Context, c *telegram.Client, kv storage.Storage) (rerr error) {
 			source := transport.New(ctx, c, kv, pool, threads, viper.GetDuration(consts.FlagReconnectTimeout), since, until)
 			source.DownloadTimeout = viper.GetDuration(flagDownloadTimeout)
 			defer func() { rerr = errors.Join(rerr, source.Close(rerr == nil)) }()
@@ -89,6 +98,7 @@ func NewAccount() *cobra.Command {
 			}
 			dir := filepath.Join(f.output, "AccountExport_"+strconv.FormatInt(source.AccountID(), 10))
 			report, err := source.ExportAccount(ctx, dir, include, opts)
+			finalReport = report
 			for _, section := range report.Sections {
 				if section.Error != "" {
 					fmt.Fprintf(cmd.ErrOrStderr(), "%s: failed: %s\n", section.Name, section.Error)
@@ -99,6 +109,15 @@ func NewAccount() *cobra.Command {
 			fmt.Fprintln(cmd.OutOrStdout(), dir)
 			return err
 		})
+		status := archive.SummaryStatus(runErr, finalReport.Summary, finalReport.Warnings)
+		if errors.Is(cmd.Context().Err(), context.Canceled) {
+			status = "canceled"
+		}
+		fmt.Fprint(cmd.ErrOrStderr(), archive.SummaryText("Finished account backup", status, finalReport.Summary, time.Now(), time.Since(started)))
+		for _, warning := range finalReport.Warnings {
+			fmt.Fprintln(cmd.ErrOrStderr(), "Export:", warning)
+		}
+		return errors.Join(runErr, writeCompletion(completionPath(cmd), "account", started, finalReport.Summary, finalReport.Warnings, runErr, cmd.Context().Err()))
 	}
 	return cmd
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,9 +18,10 @@ import (
 )
 
 type backupComponent struct {
-	Command string `json:"command"`
-	Status  string `json:"status"`
-	Error   string `json:"error,omitempty"`
+	Command string          `json:"command"`
+	Status  string          `json:"status"`
+	Error   string          `json:"error,omitempty"`
+	Summary archive.Summary `json:"summary"`
 }
 
 type backupReport struct {
@@ -27,6 +29,8 @@ type backupReport struct {
 	Finished   time.Time         `json:"finished_at,omitempty"`
 	Status     string            `json:"status"`
 	Components []backupComponent `json:"components"`
+	Summary    archive.Summary   `json:"summary"`
+	Warnings   []string          `json:"warnings,omitempty"`
 }
 
 type childRunner func(context.Context, *cobra.Command, []string) error
@@ -144,7 +148,25 @@ func newSyncPlan(run childRunner, planned func(*cobra.Command, string, schedule.
 	return cmd
 }
 
-func runBackupCycle(ctx context.Context, cmd *cobra.Command, dir string, commands [][]string, run childRunner, skipBusy bool) error {
+func runBackupCycle(ctx context.Context, cmd *cobra.Command, dir string, commands [][]string, run childRunner, skipBusy bool) (rerr error) {
+	started := time.Now().UTC()
+	provided := completionPath(cmd)
+	completion := archive.CompletionReport{Kind: "backup", Started: started, Status: "failed"}
+	defer func() {
+		completion.Finished = time.Now().UTC()
+		if rerr != nil {
+			completion.Status = "failed"
+			completion.Error = rerr.Error()
+		}
+		if errors.Is(ctx.Err(), context.Canceled) {
+			completion.Status = "canceled"
+		}
+		if provided != "" {
+			rerr = errors.Join(rerr, archive.WriteData(provided, completion))
+		} else {
+			fmt.Fprint(cmd.ErrOrStderr(), archive.SummaryText("Finished backup", completion.Status, completion.Summary, completion.Finished, completion.Finished.Sub(started)))
+		}
+	}()
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
@@ -153,9 +175,21 @@ func runBackupCycle(ctx context.Context, cmd *cobra.Command, dir string, command
 		return err
 	}
 	if lock == nil {
+		completion.Status = "skipped"
+		completion.Error = "Output folder was busy; this backup was skipped."
 		return nil
 	}
 	defer lock.Close()
+	resultPath := provided
+	if resultPath == "" {
+		f, err := os.CreateTemp(dir, ".component-result-*")
+		if err != nil {
+			return err
+		}
+		resultPath = f.Name()
+		f.Close()
+		defer os.Remove(resultPath)
+	}
 	report := backupReport{Started: time.Now().UTC(), Status: "running"}
 	path := filepath.Join(dir, "backup-report.json")
 	if err := archive.WriteData(path, report); err != nil {
@@ -177,12 +211,29 @@ func runBackupCycle(ctx context.Context, cmd *cobra.Command, dir string, command
 		if err := archive.WriteData(path, report); err != nil {
 			return err
 		}
-		err := run(ctx, cmd, args)
+		if err := os.WriteFile(resultPath, nil, 0600); err != nil {
+			return err
+		}
+		childArgs := slices.DeleteFunc(slices.Clone(args), func(arg string) bool { return strings.HasPrefix(arg, "--"+flagResultFile+"=") })
+		childArgs = append(childArgs, "--"+flagResultFile+"="+resultPath)
+		err := run(ctx, cmd, childArgs)
 		if ctx.Err() != nil {
 			err = errors.Join(err, ctx.Err())
 		}
 		component := &report.Components[len(report.Components)-1]
 		component.Status = "complete"
+		child, summaryErr := readCompletion(resultPath)
+		if summaryErr == nil && child.Kind == name {
+			component.Summary = child.Summary
+			report.Summary.Add(child.Summary)
+			report.Warnings = append(report.Warnings, child.Warnings...)
+			component.Status = child.Status
+		} else {
+			component.Summary.Error = "Child did not report media counts."
+			report.Summary.Add(component.Summary)
+		}
+		completion.Summary = report.Summary
+		completion.Warnings = report.Warnings
 		if err != nil {
 			component.Status, component.Error = "failed", err.Error()
 			failures = append(failures, fmt.Errorf("%s: %w", name, err))
@@ -191,11 +242,11 @@ func runBackupCycle(ctx context.Context, cmd *cobra.Command, dir string, command
 			return err
 		}
 	}
-	report.Status = "complete"
-	if len(failures) > 0 {
-		report.Status = "failed"
-	}
+	report.Status = archive.SummaryStatus(errors.Join(failures...), report.Summary, report.Warnings)
 	report.Finished = time.Now().UTC()
+	completion.Status = report.Status
+	completion.Summary = report.Summary
+	completion.Warnings = report.Warnings
 	return errors.Join(errors.Join(failures...), archive.WriteData(path, report))
 }
 

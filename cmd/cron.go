@@ -199,7 +199,7 @@ func cronArguments(cmd *cobra.Command) ([]string, map[string]string, error) {
 	var args []string
 	var optionErr error
 	cmd.Root().PersistentFlags().VisitAll(func(flag *pflag.Flag) {
-		if flag.Deprecated != "" || flag.Name == "proxy" {
+		if flag.Deprecated != "" || flag.Name == "proxy" || flag.Name == flagResultFile {
 			return
 		}
 		value := ""

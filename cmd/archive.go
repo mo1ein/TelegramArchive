@@ -86,7 +86,15 @@ func newArchive(f *archiveFlags) *cobra.Command {
 		if len(f.chats) == 0 && !f.all {
 			f.chats = []string{"me"}
 		}
-		return tRunArchive(cmd.Context(), f.resume, cmd.ErrOrStderr(), func(ctx context.Context, c *telegram.Client, kv storage.Storage) (rerr error) {
+		recorder, err := archive.NewSummaryRecorder(f.output)
+		if err != nil {
+			return err
+		}
+		defer recorder.Close()
+		opts.SummaryRecorder = recorder
+		started := time.Now().UTC()
+		var finalReport archive.RunReport
+		runErr := tRunArchive(cmd.Context(), f.resume, cmd.ErrOrStderr(), func(ctx context.Context, c *telegram.Client, kv storage.Storage) (rerr error) {
 			var err error
 			source := transport.New(ctx, c, kv, pool, threads, viper.GetDuration(consts.FlagReconnectTimeout), since, until)
 			source.DownloadTimeout = viper.GetDuration(flagDownloadTimeout)
@@ -165,16 +173,38 @@ func newArchive(f *archiveFlags) *cobra.Command {
 			progress := newBackupProgress(cmd.ErrOrStderr())
 			opts.OnPlan = progress.setPlan
 			opts.OnTransfer = progress.transfer
-			report, batchErr := archive.RunBatch(ctx, source, f.output, chats, opts, source.Warnings)
-			newWarnings := len(report.Warnings) != len(source.Warnings)
+			opts.OnChatFinished = func(entry archive.ChatExport) {
+				var failure error
+				if entry.Error != "" {
+					failure = errors.New(entry.Error)
+				}
+				status := archive.SummaryStatus(failure, entry.Summary, nil)
+				if errors.Is(ctx.Err(), context.Canceled) {
+					status = "canceled"
+				}
+				name := entry.Chat.Name
+				if name == "" {
+					name = entry.Chat.Key
+				}
+				progress.print(archive.SummaryText(fmt.Sprintf("Finished archive %q", name), status, entry.Summary, entry.Finished, entry.Finished.Sub(entry.Started)))
+			}
+			discoveryWarnings := slices.Clone(source.Warnings)
+			report, batchErr := archive.RunBatch(ctx, source, f.output, chats, opts, discoveryWarnings)
+			newWarnings := false
+			for _, warning := range source.Warnings {
+				if !slices.Contains(report.Warnings, warning) {
+					report.Warnings = append(report.Warnings, warning)
+					newWarnings = true
+				}
+			}
 			if newWarnings {
-				report.Warnings = source.Warnings
 				batchErr = errors.Join(batchErr, archive.WriteData(filepath.Join(f.output, "run-report.json"), report))
 			}
+			finalReport = report
 			resultErr := errors.Join(batchErr, err, ctx.Err())
 			progress.finish(resultErr)
-			if newWarnings {
-				for _, warning := range source.Warnings {
+			for _, warning := range report.Warnings {
+				if !slices.Contains(discoveryWarnings, warning) {
 					fmt.Fprintln(cmd.ErrOrStderr(), "Export:", warning)
 				}
 			}
@@ -185,6 +215,28 @@ func newArchive(f *archiveFlags) *cobra.Command {
 			}
 			return resultErr
 		})
+		status := archive.SummaryStatus(runErr, finalReport.Summary, finalReport.Warnings)
+		if errors.Is(cmd.Context().Err(), context.Canceled) {
+			status = "canceled"
+		}
+		if len(finalReport.Chats) == 0 {
+			finalReport.Summary = recorder.Total(f.output)
+			finalReport.Summary.HasMessages = true
+			finalReport.Summary.MessagesKnown = runErr == nil
+			finalReport.Summary.Filters = archive.SummaryFilters(opts)
+			status = archive.SummaryStatus(runErr, finalReport.Summary, finalReport.Warnings)
+			if errors.Is(cmd.Context().Err(), context.Canceled) {
+				status = "canceled"
+			}
+			fmt.Fprint(cmd.ErrOrStderr(), archive.SummaryText("Finished archive run", status, finalReport.Summary, time.Now(), time.Since(started)))
+		} else {
+			unit := "chat"
+			if len(finalReport.Chats) != 1 {
+				unit = "chats"
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "Finished archive run | %s | %d %s | Elapsed %s\n", archive.CompletionLabel(status), len(finalReport.Chats), unit, time.Since(started).Round(time.Second))
+		}
+		return errors.Join(runErr, writeCompletion(completionPath(cmd), "archive", started, finalReport.Summary, finalReport.Warnings, runErr, cmd.Context().Err()))
 	}
 	flags := cmd.Flags()
 	flags.BoolVar(&f.refresh, "refresh", false, "refresh existing messages and reactions while retaining archived deletions")

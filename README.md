@@ -14,6 +14,7 @@ Inspired by [tdl](https://github.com/iyear/tdl), ta uses its transfer and sessio
 - Desktop-style JSON and offline HTML with local media.
 - File-type, date and size filters.
 - Parallel downloads with progress, resume and recovery.
+- Archive and cron job results with message totals and media counts by type.
 - Account data and Saved Messages backups.
 - Incremental sync, refresh and cron schedules.
 - Multiple saved Telegram accounts with separate cron backups.

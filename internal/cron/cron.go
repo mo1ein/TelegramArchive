@@ -16,6 +16,7 @@ import (
 )
 
 type Job struct {
+	ResultFile  string            `json:"-"` // Private per-invocation child result; never saved.
 	Name        string            `json:"name"`
 	Schedule    string            `json:"schedule"`
 	Executable  string            `json:"executable"`

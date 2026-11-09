@@ -157,6 +157,17 @@ restart a stalled run after upgrading to enable this behavior.
 Ctrl+C, authorization errors and local file errors stop the run.
 `--resume=false` disables these session retries.
 
+Telegram can return repeated timeouts for a document thumbnail while its video
+or document remains downloadable. After three consecutive server timeout replies,
+ta marks that thumbnail as unavailable and continues the backup. Original videos,
+documents and photos still require successful downloads. Cancellation and local
+file errors still stop the run.
+
+Unavailable thumbnails appear as placeholders in JSON/HTML, with details in
+`archive-metadata.json` and a warning in `run-report.json`. Progress excludes them
+from the remaining download total and reports their count at completion.
+Use `--refresh` to retry these thumbnails later.
+
 ta reads history in pages of 100 messages. Downloads run in parallel:
 
 | Setting | Default | Controls |
@@ -200,6 +211,31 @@ still downloading. The bar reaches 100% after the archive output is written.
 Messages arriving after preparation are left for the next sync. If Telegram does
 not report a file size, progress uses completed files and omits the total byte
 size. Cron and redirected output receive periodic plain text updates.
+
+Each chat ends with a `Finished archive` summary. It includes the finish time,
+elapsed time, active filters, total archived messages and new messages added.
+Media results are grouped by type, with thumbnails listed separately:
+
+```text
+Type        Downloaded  Reused  Filtered  Failed  Unavailable  Canceled
+Photos      12          30      2         0       0            0
+Videos      3           8       0         0       0            0
+Thumbnails  8           20      0         0       1            0
+```
+
+These are counts for the current invocation. Downloaded means a complete,
+verified file was saved. Reused means a matching local file was checked and kept.
+Filtered means a visited file was excluded by the selected media, date, size,
+extension or MIME filters. Excluded history is not scanned just to count it.
+Failed and canceled transfers are listed separately. Retries and repeated file
+references do not inflate counts, and files downloaded before a reconnect remain
+counted as downloaded.
+
+Unchanged history is retained without recounting every old media file. An
+incremental run can therefore report the full archived message total alongside
+zero new downloads. Stored unavailable thumbnails keep the result marked
+`completed with warnings` until a refresh successfully replaces them.
+The structured counts are also saved in `run-report.json` and account reports.
 
 History stays on disk; output streams in date order.
 Memory holds a history page, transfer buffers and statistics maps.

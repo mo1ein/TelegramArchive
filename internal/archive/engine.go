@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -53,12 +54,24 @@ type ProgressSource interface {
 	DownloadWithProgress(context.Context, File, string, func(int64)) error
 }
 
+// ErrThumbnailUnavailable marks a server-side thumbnail failure after bounded
+// retries. It never excuses a failed primary attachment or a local file error.
+var ErrThumbnailUnavailable = errors.New("thumbnail unavailable")
+
+func unavailableThumbnail(file File, err error) bool {
+	var local *os.PathError
+	return file.Field == "thumbnail" && errors.Is(err, ErrThumbnailUnavailable) &&
+		!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !errors.As(err, &local)
+}
+
 type TransferEventKind uint8
 
 const (
 	TransferStarted TransferEventKind = iota
 	TransferProgressed
 	TransferFinished
+	TransferReused
+	TransferFiltered
 )
 
 type TransferEvent struct {
@@ -66,29 +79,33 @@ type TransferEvent struct {
 	File  File
 	Delta int64
 	Err   error
+	Bytes int64 // Size of the verified completed file, independent of metadata.
 }
 
 type Options struct {
-	Media          []string
-	Concurrency    int
-	MaxFileSize    int64
-	MinFileSize    int64
-	Extensions     []string
-	MIMETypes      []string
-	OnlyMedia      bool
-	Format         string
-	ExportName     string
-	HTMLPageSize   int
-	PartSize       int64
-	Since          time.Time
-	Until          time.Time
-	Resume         bool
-	Refresh        bool
-	Takeout        bool
-	Progress       func(int)
-	OnTransfer     func(TransferEvent)
-	OnPlan         func(DownloadPlan)
-	snapshotNewest *int
+	Media                 []string
+	Concurrency           int
+	MaxFileSize           int64
+	MinFileSize           int64
+	Extensions            []string
+	MIMETypes             []string
+	OnlyMedia             bool
+	Format                string
+	ExportName            string
+	HTMLPageSize          int
+	PartSize              int64
+	Since                 time.Time
+	Until                 time.Time
+	Resume                bool
+	Refresh               bool
+	Takeout               bool
+	Progress              func(int)
+	OnTransfer            func(TransferEvent)
+	OnPlan                func(DownloadPlan)
+	SummaryRecorder       *SummaryRecorder
+	OnChatFinished        func(ChatExport)
+	snapshotNewest        *int
+	unavailableThumbnails *sync.Map
 }
 
 func (o Options) Validate() error {
@@ -124,8 +141,9 @@ func (o Options) Validate() error {
 var MediaKinds = []string{"photos", "videos", "audios", "stickers", "animations", "documents", "voice_messages", "video_messages", "contacts"}
 
 type Result struct {
-	Paths []string
-	Stats Stats
+	Paths   []string
+	Stats   Stats
+	Summary Summary
 }
 type checkpoint struct {
 	Settings   string
@@ -140,10 +158,14 @@ var messageBucket = []byte("messages")
 var metaBucket = []byte("meta")
 var stateKey = []byte("checkpoint")
 
-// Run checkpoints a page only after every selected media file succeeds. An
+// Run checkpoints a page after required media succeeds; unavailable optional
+// thumbnails are recorded explicitly. An
 // interrupted page is retried, and already completed files are reused by size.
 // bbolt provides ordered disk-backed iteration without collecting chat history.
-func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options) (Result, error) {
+func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options) (result Result, rerr error) {
+	if opts.unavailableThumbnails == nil {
+		opts.unavailableThumbnails = &sync.Map{}
+	}
 	if err := opts.Validate(); err != nil {
 		return Result{}, err
 	}
@@ -153,6 +175,25 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return Result{}, err
 	}
+	if opts.SummaryRecorder == nil {
+		var err error
+		opts.SummaryRecorder, err = NewSummaryRecorder(dir)
+		if err != nil {
+			return Result{}, err
+		}
+		defer opts.SummaryRecorder.Close()
+	}
+	opts = summaryOptions(opts, dir)
+	var inventory int64
+	var inventoryKnown bool
+	defer func() {
+		opts.SummaryRecorder.SetMessages(dir, result.Stats.Messages+result.Stats.ServiceMessages, rerr == nil)
+		if inventoryKnown {
+			opts.SummaryRecorder.SetStoredUnavailable(dir, inventory)
+		}
+		result.Summary = opts.SummaryRecorder.Snapshot(dir)
+		result.Summary.Filters = SummaryFilters(opts)
+	}()
 	db, err := bolt.Open(filepath.Join(dir, "archive.db"), 0600, &bolt.Options{Timeout: time.Second})
 	if err != nil {
 		return Result{}, fmt.Errorf("open archive checkpoint: %w", err)
@@ -207,6 +248,9 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 		if err := prepareRenderIndexes(ctx, tx); err != nil {
 			return err
 		}
+		if err := prepareThumbnailInventory(tx); err != nil {
+			return err
+		}
 		b, err := json.Marshal(state)
 		if err != nil {
 			return err
@@ -216,8 +260,17 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 	if err != nil {
 		return Result{}, err
 	}
+	if err = db.View(func(tx *bolt.Tx) error {
+		inventory = int64(binary.BigEndian.Uint64(tx.Bucket(metaBucket).Get(thumbnailInventoryKey)))
+		return nil
+	}); err != nil {
+		return Result{}, err
+	}
+	inventoryKnown = true
 	save := func(items []Item) error {
-		return db.Update(func(tx *bolt.Tx) error {
+		var added int64
+		nextInventory := inventory
+		err := db.Update(func(tx *bolt.Tx) error {
 			for _, item := range items {
 				b, err := json.Marshal(item.Message)
 				if err != nil {
@@ -228,11 +281,17 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 				if bytes.Equal(bucket.Get(key), b) {
 					continue
 				}
+				if bucket.Get(key) == nil {
+					added++
+				}
 				if err := bucket.Put(key, b); err != nil {
 					return err
 				}
 				row, err := messageMetadata(item.Message)
 				if err != nil {
+					return err
+				}
+				if err = updateThumbnailInventory(tx, key, item.Message); err != nil {
 					return err
 				}
 				if len(row) == 0 {
@@ -252,11 +311,28 @@ func Run(ctx context.Context, source Source, dir string, chat Chat, opts Options
 			if err != nil {
 				return err
 			}
+			nextInventory = int64(binary.BigEndian.Uint64(tx.Bucket(metaBucket).Get(thumbnailInventoryKey)))
 			return tx.Bucket(metaBucket).Put(stateKey, b)
 		})
+		if err == nil {
+			inventory = nextInventory
+			opts.SummaryRecorder.AddMessages(dir, added)
+		}
+		return err
 	}
 	err = walkHistory(ctx, source, chat, &state, opts, func(items []Item) error {
 		selected := FilterItems(items, opts)
+		selectedIDs := map[int]bool{}
+		for _, item := range selected {
+			selectedIDs[item.Message.ID] = true
+		}
+		for _, item := range items {
+			if !selectedIDs[item.Message.ID] {
+				for _, file := range item.Files {
+					opts.OnTransfer(TransferEvent{Kind: TransferFiltered, File: file})
+				}
+			}
+		}
 		if err := downloadPage(ctx, source, dir, selected, opts); err != nil {
 			return err
 		}
@@ -396,6 +472,9 @@ func downloadPage(ctx context.Context, source Source, dir string, items []Item, 
 				}
 				value := Excluded
 				reason := fileSkipReason(file, item.Message, opts)
+				if reason != "" && opts.OnTransfer != nil {
+					opts.OnTransfer(TransferEvent{Kind: TransferFiltered, File: file})
+				}
 				if reason == "file_size" {
 					value = TooLarge
 				}
@@ -408,9 +487,13 @@ func downloadPage(ctx context.Context, source Source, dir string, items []Item, 
 					}
 					_, err, _ := transfers.Do(file.Path, func() (any, error) { return nil, downloadFile(ctx, source, dir, file, opts) })
 					if err != nil {
-						return fmt.Errorf("message %d, %s: %w", item.Message.ID, file.Path, err)
+						if ctx.Err() != nil || !unavailableThumbnail(file, err) {
+							return fmt.Errorf("message %d, %s: %w", item.Message.ID, file.Path, err)
+						}
+						reason = "unavailable"
+					} else {
+						value = file.Path
 					}
-					value = file.Path
 				}
 				switch file.Field {
 				case "custom_emoji":
@@ -440,7 +523,25 @@ func downloadPage(ctx context.Context, source Source, dir string, items []Item, 
 func downloadFile(ctx context.Context, source Source, dir string, file File, opts Options) (rerr error) {
 	dest := filepath.Join(dir, filepath.FromSlash(file.Path))
 	if completedFile(dir, file) {
+		if opts.OnTransfer != nil {
+			opts.OnTransfer(TransferEvent{Kind: TransferReused, File: file, Bytes: downloadSize(file)})
+		}
 		return nil
+	}
+	if opts.unavailableThumbnails != nil {
+		if failure, ok := opts.unavailableThumbnails.Load(dest); ok {
+			return failure.(error)
+		}
+		defer func() {
+			if unavailableThumbnail(file, rerr) {
+				opts.unavailableThumbnails.Store(dest, rerr)
+			}
+		}()
+	}
+	var written int64
+	if opts.OnTransfer != nil {
+		opts.OnTransfer(TransferEvent{Kind: TransferStarted, File: file})
+		defer func() { opts.OnTransfer(TransferEvent{Kind: TransferFinished, File: file, Err: rerr, Bytes: written}) }()
 	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0700); err != nil {
 		return err
@@ -453,10 +554,6 @@ func downloadFile(ctx context.Context, source Source, dir string, file File, opt
 	f.Close()
 	defer os.Remove(tmp)
 	var reported atomic.Int64
-	if opts.OnTransfer != nil {
-		opts.OnTransfer(TransferEvent{Kind: TransferStarted, File: file})
-		defer func() { opts.OnTransfer(TransferEvent{Kind: TransferFinished, File: file, Err: rerr}) }()
-	}
 	if file.Data != nil {
 		err = os.WriteFile(tmp, file.Data, 0600)
 	} else {
@@ -485,7 +582,11 @@ func downloadFile(ctx context.Context, source Source, dir string, file File, opt
 	if opts.OnTransfer != nil && st.Size() > reported.Load() {
 		opts.OnTransfer(TransferEvent{Kind: TransferProgressed, File: file, Delta: st.Size() - reported.Load()})
 	}
-	return os.Rename(tmp, dest)
+	err = os.Rename(tmp, dest)
+	if err == nil {
+		written = st.Size()
+	}
+	return err
 }
 
 func writeJSON(path string, value any) error {

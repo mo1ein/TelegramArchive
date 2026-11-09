@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gotd/td/bin"
 	tgclient "github.com/gotd/td/telegram"
@@ -45,6 +46,31 @@ func TestAccountMetadataExcludesAuthorizationHashes(t *testing.T) {
 	}
 	if bytes.Contains(b, []byte("9223372036854775806")) || bytes.Contains(b, []byte(`"hash"`)) {
 		t.Fatal("authorization hash leaked into backup")
+	}
+}
+
+func TestAccountSummaryCountsMediaAndFilters(t *testing.T) {
+	api := tg.NewClient(tgclient.InvokeFunc(func(ctx context.Context, input bin.Encoder, output bin.Decoder) error {
+		switch input.(type) {
+		case *tg.PhotosGetUserPhotosRequest:
+			output.(*tg.PhotosPhotosBox).Photos = &tg.PhotosPhotos{Photos: []tg.PhotoClass{
+				&tg.Photo{ID: 1, Date: 100, DCID: 4, Sizes: []tg.PhotoSizeClass{&tg.PhotoSize{Type: "x", Size: 4, W: 10, H: 10}}},
+				&tg.Photo{ID: 2, Date: 100, DCID: 4, Sizes: []tg.PhotoSizeClass{&tg.PhotoSize{Type: "x", Size: 8, W: 10, H: 10}}},
+			}}
+		case *tg.UploadGetFileRequest:
+			output.(*tg.UploadFileBox).File = &tg.UploadFile{Type: &tg.StorageFileJpeg{}, Bytes: []byte("file")}
+		default:
+			t.Fatalf("unexpected account request %T", input)
+		}
+		return nil
+	}))
+	source := &Source{api: api, accountID: 42, self: &tg.User{ID: 42}, threads: 1, pool: watchdogTestPool{client: func(context.Context, int) *tg.Client { return api }}}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	report, err := source.ExportAccount(ctx, t.TempDir(), []string{"profile_photos"}, archive.Options{Concurrency: 1, Format: "both", Media: []string{"photos"}, MaxFileSize: 4})
+	counts := report.Summary.Totals()
+	if err != nil || !report.Summary.MediaKnown || counts.Downloaded != 1 || counts.Filtered != 1 || report.Summary.DownloadedBytes != 4 {
+		t.Fatalf("account outcomes missing: summary=%+v err=%v", report.Summary, err)
 	}
 }
 
