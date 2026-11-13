@@ -40,7 +40,9 @@ func planBatch(ctx context.Context, source Source, root string, directories []st
 	name := f.Name()
 	f.Close()
 	defer os.Remove(name)
-	db, err := bolt.Open(name, 0600, nil)
+	// This database is rebuilt for each scan and never used for recovery.
+	// Avoid a durable disk flush per page; archive checkpoints remain synced.
+	db, err := bolt.Open(name, 0600, &bolt.Options{NoSync: true})
 	if err != nil {
 		return nil, err
 	}
