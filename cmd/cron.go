@@ -26,7 +26,7 @@ func NewCron() *cobra.Command {
 
 func newCron(manager managedcron.Manager, execute managedcron.Runner) *cobra.Command {
 	group := &cobra.Command{Use: "cron", Short: "Install and manage backups in your system crontab", Annotations: map[string]string{"offline": "true"}}
-	var runNow bool
+	var runNow, atStartup bool
 	add := newSyncPlan(nil, func(cmd *cobra.Command, dir string, timing schedule.Options) error {
 		name := cmd.Flags().Args()[0]
 		if err := managedcron.ValidateName(name); err != nil {
@@ -51,11 +51,14 @@ func newCron(manager managedcron.Manager, execute managedcron.Runner) *cobra.Com
 		if err != nil {
 			return err
 		}
-		job := managedcron.Job{Name: name, Schedule: expression, Executable: executable, Directory: working, Arguments: args, Environment: environment, Log: filepath.Join(manager.Directory, name+".log")}
+		job := managedcron.Job{Name: name, Schedule: expression, AtStartup: atStartup, Executable: executable, Directory: working, Arguments: args, Environment: environment, Log: filepath.Join(manager.Directory, name+".log")}
 		if err := manager.Install(cmd.Context(), job); err != nil {
 			return err
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Installed cron job %q: %s (cron's timezone)\nOutput: %s\nLog: %s\nTa can exit; cron will launch each backup.\n", name, expression, dir, job.Log)
+		if atStartup {
+			fmt.Fprintln(cmd.OutOrStdout(), "Also runs at system startup, waiting for a busy output folder.")
+		}
 		if runNow {
 			skipBusy, _ := cmd.Flags().GetBool("skip-busy")
 			return managedcron.Run(cmd.Context(), manager.File(name), cmd.OutOrStdout(), cronRunWithSkipBusy(execute, cmd.Flags().Changed("skip-busy") && skipBusy))
@@ -72,6 +75,7 @@ func newCron(manager managedcron.Manager, execute managedcron.Runner) *cobra.Com
 	add.Flags().Lookup("every").DefValue = "6h"
 	add.Flags().Lookup("every").Usage = "cron interval: minutes dividing an hour, hours dividing a day, or 24h"
 	add.Flags().BoolVar(&runNow, "run-now", false, "also run the first backup immediately after installing cron")
+	add.Flags().BoolVar(&atStartup, "at-startup", false, "also run a backup at system startup to catch up after downtime")
 	add.Flags().MarkHidden("runs")
 	add.Flags().MarkHidden("stop-on-error")
 
@@ -99,7 +103,11 @@ func newCron(manager managedcron.Manager, execute managedcron.Runner) *cobra.Com
 			if !job.Installed {
 				status = "not in crontab"
 			}
-			fmt.Fprintf(out, "%s\t%s\t%s\t%s\n", job.Name, job.Schedule, status, job.Log)
+			expression := job.Schedule
+			if job.AtStartup {
+				expression += " + startup"
+			}
+			fmt.Fprintf(out, "%s\t%s\t%s\t%s\n", job.Name, expression, status, job.Log)
 		}
 		return out.Flush()
 	}}
@@ -254,7 +262,7 @@ func cronArguments(cmd *cobra.Command) ([]string, map[string]string, error) {
 	args = append(args, "sync")
 	cmd.LocalNonPersistentFlags().VisitAll(func(flag *pflag.Flag) {
 		switch flag.Name {
-		case "every", "runs", "stop-on-error", "run-now", "help":
+		case "every", "runs", "stop-on-error", "run-now", "at-startup", "help":
 			return
 		}
 		// These flags enable account backup / override its takeout default by

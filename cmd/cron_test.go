@@ -61,7 +61,7 @@ func TestCronInstallCapturesSettingsAndRunsSyncOnlyOnce(t *testing.T) {
 			})
 			var output bytes.Buffer
 			root.SetOut(&output)
-			args := []string{"--storage=type=bolt,path=sessions", "cron", "add", "channel", "--chat=Private group", "--every=6h", "--media=all", "--format=both", "--output=backup", "--run-now"}
+			args := []string{"--storage=type=bolt,path=sessions", "cron", "add", "channel", "--chat=Private group", "--every=6h", "--media=all", "--format=both", "--output=backup", "--run-now", "--at-startup"}
 			if account {
 				args = append(args, "--account")
 			}
@@ -71,6 +71,9 @@ func TestCronInstallCapturesSettingsAndRunsSyncOnlyOnce(t *testing.T) {
 			}
 			if calls != 1 || table.writes != 1 {
 				t.Fatalf("calls=%d writes=%d", calls, table.writes)
+			}
+			if !strings.Contains(table.content, "@reboot ") || !strings.Contains(table.content, "0 */6 * * * ") {
+				t.Fatalf("startup option must keep both triggers: %s", table.content)
 			}
 			if strings.Contains(table.content, "private") || strings.Contains(output.String(), "private") {
 				t.Fatal("credentials were printed or put in crontab")
@@ -88,7 +91,7 @@ func TestCronInstallCapturesSettingsAndRunsSyncOnlyOnce(t *testing.T) {
 				}
 			}
 			for _, value := range job.Arguments {
-				if strings.HasPrefix(value, "--every=") || strings.HasPrefix(value, "--account-include") || strings.HasPrefix(value, "--takeout") || strings.HasPrefix(value, "--run-now") {
+				if strings.HasPrefix(value, "--every=") || strings.HasPrefix(value, "--account-include") || strings.HasPrefix(value, "--takeout") || strings.HasPrefix(value, "--run-now") || strings.HasPrefix(value, "--at-startup") {
 					t.Fatalf("changed one-shot argument: %q", value)
 				}
 			}
