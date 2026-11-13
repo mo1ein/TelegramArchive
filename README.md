@@ -19,14 +19,15 @@ Inspired by [tdl](https://github.com/iyear/tdl), ta uses its transfer and sessio
 - Incremental sync, refresh and cron schedules.
 - Multiple saved Telegram accounts with separate cron backups.
 - Offline rendering, statistics, uploads and forwarding.
+- Interactive Bubble Tea workspace with chat/account browsers, action buttons and live task results.
 
 ## Installation
 
-With Go 1.25.8 or newer installed, run:
+With Go 1.26 or newer installed, run:
 
 ```sh
 go install github.com/mo1ein/TelegramArchive/cmd/ta@latest
-ta --help
+ta
 ```
 
 Run the same `go install` command to update ta. Go installs the binary into
@@ -46,10 +47,22 @@ To install a local checkout, including unpublished changes, run
 
 ## Quick start
 
+Run `ta` or `ta tui` in a terminal to open the interactive workspace. Choose a
+quick-start workflow or search every command with `/`. Edit options, press
+`Ctrl+R` to review, then `Enter` to run. Login prompts and transfer progress
+stay inside the workspace. Browse chats, switch accounts and manage schedules
+from selectable lists with action buttons. [Workspace guide and shortcuts](docs/tui.md).
+
+The commands below also work directly:
+
 ```sh
 ta login -T qr                  # use -T code for phone/code login
 ta archive --all --types channels --media all --format both
 ```
+
+On macOS, you can also import the login from your existing native Telegram app,
+including the website download. See [macOS login setup](docs/macos.md) for Full
+Disk Access, local passcodes, verification and import commands.
 
 This exports every joined channel, including private channels and archived dialogs.
 Files go to `./data`. Open `data/export_results.html` to browse them.
@@ -101,9 +114,11 @@ Click a preview to enlarge it.
 
 | Guide | Covers |
 | --- | --- |
+| [Interactive workspace](docs/tui.md) | Search, guided forms, presets, advanced options, review and keyboard shortcuts |
 | [Archiving](docs/archiving.md) | Chat selection, media/date/size filters, custom names, resume, refresh, progress, JSON/HTML, offline rendering and statistics |
 | [Backups](docs/backups.md) | Account sections, Saved Messages, one-time sync, recurring sync, cron jobs and logs |
 | [Accounts and settings](docs/configuration.md) | Login, multiple terminals, proxies, storage, environment settings, transfer commands and build checks |
+| [macOS login setup](docs/macos.md) | Native website client, data paths, Full Disk Access, passcodes, import and troubleshooting |
 | [Transfers and tools](docs/README.md#transfers-and-tools) | Downloads, uploads, forwarding, chat tools, templates, session tools, extensions and shell completion |
 | [Desktop export coverage](docs/desktop-compatibility.md) | Supported formats, fields and API limits |
 | [Contributing](CONTRIBUTING.md) | Development workflow and privacy checks |

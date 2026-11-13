@@ -2,7 +2,30 @@
 
 [Documentation index](README.md)
 
+## Telegram login on macOS
+
+See [macOS login setup](macos.md) for the native website client's data directory,
+Full Disk Access for Terminal or a coding agent, masked local passcode prompts,
+and read-only verification before import. Its
+[troubleshooting table](macos.md#troubleshooting) covers permission errors,
+key-unlock failures, unsupported authorization archives and pasted shell prompts.
+
 ## Connection timeouts or EOF
+
+If **Browse your chats** stays on a loading screen, use a current build. The
+browser reports its connection stage and shows each chat page as it arrives.
+Connection setup times out after 30 seconds. On failure, Activity shows the
+reason and **Connection settings** opens the proxy field. If some chats have
+arrived, **Stop loading** keeps them and enables their action buttons. Quit
+native Telegram while using a login imported from it.
+
+A successful `ping telegram.org` tests ICMP reachability to that address. It does
+not test Telegram's API connection: ta uses MTProto to a data-centre endpoint
+over TCP. Website traffic, ICMP and API traffic can have different routes or
+filtering. See Telegram's [transport](https://core.telegram.org/mtproto/transports)
+and [data-centre](https://core.telegram.org/api/datacenter) documentation. A direct
+timeout that succeeds through a proxy points to a problem with the direct route;
+ping alone does not identify where the problem is.
 
 Check your connection and proxy. These are examples; replace the proxy address with your own:
 

@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/gotd/td/telegram/message/peer"
 	"github.com/gotd/td/telegram/peers"
@@ -24,7 +25,7 @@ func peerKey(p tg.PeerClass) string {
 
 // Explicitly visit both Telegram folders. Inaccessible peers can still supply a
 // pagination cursor, so one removed channel cannot truncate the remaining list.
-func (s *Source) folderDialogs(ctx context.Context, api *tg.Client, folder int, types []string) ([]archive.Chat, error) {
+func (s *Source) folderDialogs(ctx context.Context, api *tg.Client, folder int, types []string, visit func([]archive.Chat) error) ([]archive.Chat, error) {
 	var chats []archive.Chat
 	offsetID, offsetDate := 0, 0
 	var offsetPeer tg.InputPeerClass = &tg.InputPeerEmpty{}
@@ -32,7 +33,13 @@ func (s *Source) folderDialogs(ctx context.Context, api *tg.Client, folder int, 
 	for {
 		req := &tg.MessagesGetDialogsRequest{OffsetID: offsetID, OffsetDate: offsetDate, OffsetPeer: offsetPeer, Limit: 100, ExcludePinned: offsetID != 0}
 		req.SetFolderID(folder)
-		raw, err := api.MessagesGetDialogs(ctx, req)
+		callCtx := ctx
+		cancel := func() {}
+		if visit != nil {
+			callCtx, cancel = context.WithTimeout(ctx, 20*time.Second)
+		}
+		raw, err := api.MessagesGetDialogs(callCtx, req)
+		cancel()
 		if err != nil {
 			return chats, fmt.Errorf("list folder %d: %w", folder, err)
 		}
@@ -65,6 +72,7 @@ func (s *Source) folderDialogs(ctx context.Context, api *tg.Client, folder int, 
 				lastMessages[peerKey(m.GetPeerID())] = m
 			}
 		}
+		pageStart := len(chats)
 		cursorKey := ""
 		for _, d := range dialogs {
 			if _, ok := d.(*tg.DialogFolder); ok {
@@ -116,6 +124,11 @@ func (s *Source) folderDialogs(ctx context.Context, api *tg.Client, folder int, 
 				if matches(chat, types) {
 					chats = append(chats, chat)
 				}
+			}
+		}
+		if visit != nil && len(chats) > pageStart {
+			if err := visit(chats[pageStart:]); err != nil {
+				return chats, err
 			}
 		}
 		if done {

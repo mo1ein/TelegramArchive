@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -78,10 +79,18 @@ func newCron(manager managedcron.Manager, execute managedcron.Runner) *cobra.Com
 	add.Flags().MarkHidden("runs")
 	add.Flags().MarkHidden("stop-on-error")
 
+	var listJSON bool
 	list := &cobra.Command{Use: "list", Short: "List ta's cron backups", Args: cobra.NoArgs, Annotations: map[string]string{"offline": "true"}, RunE: func(cmd *cobra.Command, _ []string) error {
 		jobs, err := manager.List(cmd.Context())
 		if err != nil {
 			return err
+		}
+		if listJSON {
+			rows := make([]map[string]any, 0, len(jobs))
+			for _, job := range jobs {
+				rows = append(rows, map[string]any{"name": job.Name, "schedule": job.Schedule, "installed": job.Installed, "log": job.Log})
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(rows)
 		}
 		if len(jobs) == 0 {
 			fmt.Fprintln(cmd.OutOrStdout(), "No ta cron jobs. Add one with: ta cron add NAME --chat channel_username --every 6h")
@@ -102,6 +111,7 @@ func newCron(manager managedcron.Manager, execute managedcron.Runner) *cobra.Com
 		}
 		return out.Flush()
 	}}
+	list.Flags().BoolVar(&listJSON, "json", false, "output scheduled backups as JSON")
 	remove := &cobra.Command{Use: "remove NAME", Aliases: []string{"rm"}, Short: "Remove a cron backup; keep its archives and logs", Args: cobra.ExactArgs(1), Annotations: map[string]string{"offline": "true"}, RunE: func(cmd *cobra.Command, args []string) error {
 		if err := manager.Remove(cmd.Context(), args[0]); err != nil {
 			return err

@@ -15,6 +15,7 @@ import (
 	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/mattn/go-runewidth"
 	"github.com/mo1ein/TelegramArchive/internal/archive"
+	"github.com/mo1ein/TelegramArchive/internal/taskui"
 	"golang.org/x/term"
 )
 
@@ -70,6 +71,10 @@ func newBackupProgress(output io.Writer) *backupProgress {
 				}
 			}
 			lines := p.lines(time.Now(), width)
+			if terminal && os.Getenv("TA_TUI_CHILD") == "1" {
+				taskui.WriteProgress(output, lines)
+				return
+			}
 			if terminal {
 				if drawn {
 					fmt.Fprint(output, "\x1b[3A")

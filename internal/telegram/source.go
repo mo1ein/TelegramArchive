@@ -292,6 +292,16 @@ func matches(chat archive.Chat, types []string) bool {
 }
 
 func (s *Source) Dialogs(ctx context.Context, types []string) ([]archive.Chat, error) {
+	return s.walkDialogs(ctx, types, nil)
+}
+
+// StreamDialogs emits each page as soon as it arrives, without fetching forum
+// topics or resolving every peer through additional network requests.
+func (s *Source) StreamDialogs(ctx context.Context, types []string, visit func([]archive.Chat) error) error {
+	_, err := s.walkDialogs(ctx, types, visit)
+	return err
+}
+func (s *Source) walkDialogs(ctx context.Context, types []string, visit func([]archive.Chat) error) ([]archive.Chat, error) {
 	if err := ValidateTypes(types); err != nil {
 		return nil, err
 	}
@@ -307,13 +317,36 @@ func (s *Source) Dialogs(ctx context.Context, types []string) ([]archive.Chat, e
 	var failures []error
 	for _, api := range apis {
 		for _, folder := range []int{0, 1} {
-			found, err := s.folderDialogs(ctx, api, folder, types)
-			for _, chat := range found {
-				if !seen[chat.Key] {
-					chats = append(chats, chat)
-					seen[chat.Key] = true
+			if err := ctx.Err(); err != nil {
+				return chats, err
+			}
+			var onPage func([]archive.Chat) error
+			if visit != nil {
+				onPage = func(page []archive.Chat) error {
+					fresh := []archive.Chat{}
+					for _, chat := range page {
+						if !seen[chat.Key] {
+							chats = append(chats, chat)
+							fresh = append(fresh, chat)
+							seen[chat.Key] = true
+						}
+					}
+					if len(fresh) > 0 {
+						return visit(fresh)
+					}
+					return nil
 				}
 			}
+			found, err := s.folderDialogs(ctx, api, folder, types, onPage)
+			if visit == nil {
+				for _, chat := range found {
+					if !seen[chat.Key] {
+						chats = append(chats, chat)
+						seen[chat.Key] = true
+					}
+				}
+			}
+
 			if err != nil {
 				failures = append(failures, err)
 			}

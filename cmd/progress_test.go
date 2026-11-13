@@ -142,3 +142,13 @@ func TestBackupProgressKeepsArchiveSummaryVisible(t *testing.T) {
 		t.Fatalf("summary was lost or corrupted in progress output: %q", text)
 	}
 }
+
+func TestTUIProgressDoesNotWritePrivateFramesToPipedLogs(t *testing.T) {
+	t.Setenv("TA_TUI_CHILD", "1")
+	var output bytes.Buffer
+	progress := newBackupProgress(&output)
+	progress.finish(nil)
+	if strings.Contains(output.String(), "\x1b]777;") || !strings.Contains(output.String(), "Backup complete") {
+		t.Fatal("private UI progress escaped into a plain log")
+	}
+}

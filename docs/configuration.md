@@ -2,13 +2,61 @@
 
 [Back to README](../README.md)
 
-Log in with QR, phone/code or a Telegram Desktop session:
+Log in with QR, phone/code or a Telegram Desktop session (the default):
 
 ```sh
 ta login -T qr
 ta login -T code
 ta login -T desktop
 ```
+
+Desktop import supports both the `tdata` format from
+[Telegram Desktop](https://desktop.telegram.org/) and the Postbox session format
+of native [Telegram for macOS](https://macos.telegram.org/), including the website
+download. It discovers the installed client's data without changing the default
+login method.
+
+For the native website client on macOS, follow the
+[macOS login guide](macos.md) for Full Disk Access and the full import process.
+Verify its session before saving a login, using an explicit path to select it
+when Telegram Desktop is also installed:
+
+```sh
+ta login --check -d "$HOME/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable"
+ta login -d "$HOME/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable"
+```
+
+`--check` decrypts and validates the saved authorization locally, reports the
+number of usable accounts, and exits without writing a ta login or connecting
+to Telegram. If the native client has a local app passcode, an interactive
+terminal asks for it with a masked prompt. This is the local app passcode, not
+the two-step verification password. Scripts can supply it with `-p`.
+The TUI masks this field and hides it in command previews.
+
+Import opens Telegram's files read-only, authenticates encrypted database pages,
+and reads only account metadata and authorization tables. It leaves the source
+session intact. Quit the native Telegram app before using the imported login in
+other ta commands: the two clients share its authorization key.
+
+If macOS denies access to the Group Containers directory, enable **Full Disk
+Access** for the app running the command (Terminal, iTerm or Codex), quit and
+reopen that app, then retry. This is an operating-system permission; choosing a
+different directory cannot grant it.
+
+To import Desktop data from a custom location, use
+`ta login -d "/path/to/Telegram Desktop"` (the `tdata` directory itself is also
+accepted). A native data directory can also be supplied with
+`ta login -d "$HOME/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable"`.
+The group directory, `accounts-metadata` directory and `atomic-state` file are
+accepted too. QR and phone/code login do not require either desktop app.
+
+On macOS, discovery checks both `~/Library/Application Support/Telegram Desktop`
+and `~/Library/Containers/org.telegram.desktop/Data/Library/Application Support/Telegram Desktop`.
+It also checks the native client's `stable`, `appstore` and `beta` data channels
+under its Group Containers directory. Read permission errors are reported
+instead of being treated as missing data. Synthetic SQLCipher 3/4 fixtures cover
+passcodes, integrity checks, committed WAL snapshots and session storage; client
+database/schema changes that are not recognized fail without modifying the source.
 
 List saved logins or choose a namespace:
 
@@ -28,7 +76,8 @@ IDs mean the same account, even when the namespace names differ. Existing archiv
 belong to the recorded Telegram account ID; use that account to resume them or
 choose a separate output folder for another account.
 
-Login also prints your account ID and username. Choose QR, phone/code or Desktop session import with `-T`.
+Native macOS import prints the imported account ID. Other login methods also
+retrieve the username. Choose QR, phone/code or Desktop session import with `-T`.
 Fresh sessions and logs go under `~/.ta/`. Existing ta session stores are reused.
 Commands accept flags and exported `TA_*` settings. Explicit flags take priority.
 There is no `.env` loading. Docker and Python are not required.
@@ -68,6 +117,11 @@ Default storage selection then uses that directory.
 Update `--storage` or `TA_STORAGE` too if you set either explicitly.
 
 ## Other commands and development
+
+Run `ta` or `ta tui` to configure and run commands in the
+[interactive workspace](tui.md). Start it with `ta --ns work tui` to select a
+saved account, or edit the namespace field in any workflow. The workspace opens
+without connecting to Telegram or locking a saved session.
 
 | Command | Purpose |
 | --- | --- |

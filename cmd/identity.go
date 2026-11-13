@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -20,9 +21,27 @@ func wrapLoginIdentity(root *cobra.Command) {
 			continue
 		}
 		login := command.RunE
+		command.Flags().Bool("check", false, "verify imported session data without saving a login or connecting to Telegram")
+		command.Flags().Lookup("desktop").Usage = "Telegram Desktop tdata or native macOS data directory; auto-detect if empty"
 		command.Short = "Log in to the selected Telegram account namespace"
-		command.Long = "Log in to the selected namespace. Use ta accounts to see saved accounts and -n <namespace> to choose one."
+		command.Long = "Log in to the selected namespace. Desktop session import is the default and supports Telegram Desktop tdata and the native Telegram for macOS client. Use --check to verify session data without saving it, -T qr for QR login, or -T code for phone/code login. Use ta accounts to see saved accounts and -n <namespace> to choose one."
 		command.RunE = func(cmd *cobra.Command, args []string) error {
+			check, _ := cmd.Flags().GetBool("check")
+			mode := cmd.Flags().Lookup("type")
+			legacy, _ := cmd.Flags().GetBool("code")
+			if check && (mode == nil || mode.Value.String() != "desktop" || legacy) {
+				return fmt.Errorf("--check applies to Desktop/native session imports; omit -T qr, -T code and --code")
+			}
+			native, err := prepareDesktopLogin(cmd)
+			if err != nil {
+				return err
+			}
+			if native {
+				return runNativeLogin(cmd, check)
+			}
+			if check {
+				return checkDesktopLogin(cmd)
+			}
 			if err := login(cmd, args); err != nil {
 				return err
 			}
@@ -51,18 +70,24 @@ func NewAccounts() *cobra.Command {
 }
 
 func newAccounts(list func(context.Context) ([]string, error), lookup func(context.Context, string) (int64, string, error)) *cobra.Command {
-	return &cobra.Command{
+	var asJSON bool
+	command := &cobra.Command{
 		Use:   "accounts",
 		Short: "List saved Telegram accounts and their namespaces",
 		Long:  "List saved Telegram accounts. Busy sessions are marked and skipped. Choose an account with -n <namespace>.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if asJSON {
+				// Keep partial rows machine-readable even when one account fails.
+				cmd.SilenceUsage = true
+			}
 			namespaces, err := list(cmd.Context())
 			if err != nil {
 				return err
 			}
 			selected := viper.GetString("ns")
 			var failures []error
+			rows := []map[string]any{}
 			for _, namespace := range namespaces {
 				if err := cmd.Context().Err(); err != nil {
 					return err
@@ -78,21 +103,40 @@ func newAccounts(list func(context.Context) ([]string, error), lookup func(conte
 				if err != nil {
 					var busy *sessionBusyError
 					if errors.As(err, &busy) {
-						fmt.Fprintf(cmd.OutOrStdout(), "%s  [busy]%s\n", namespace, marker)
+						if asJSON {
+							rows = append(rows, map[string]any{"namespace": namespace, "status": "busy"})
+						} else {
+							fmt.Fprintf(cmd.OutOrStdout(), "%s  [busy]%s\n", namespace, marker)
+						}
 						continue
 					}
-					fmt.Fprintf(cmd.OutOrStdout(), "%s  [unavailable]%s\n", namespace, marker)
+					if asJSON {
+						rows = append(rows, map[string]any{"namespace": namespace, "status": "unavailable"})
+					} else {
+						fmt.Fprintf(cmd.OutOrStdout(), "%s  [unavailable]%s\n", namespace, marker)
+					}
 					failures = append(failures, fmt.Errorf("read account in namespace %q: %w", namespace, err))
 					continue
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%s  %d  %s%s\n", namespace, id, usernameOrPlaceholder(username), marker)
+				if asJSON {
+					rows = append(rows, map[string]any{"namespace": namespace, "id": id, "username": username, "status": "ready"})
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), "%s  %d  %s%s\n", namespace, id, usernameOrPlaceholder(username), marker)
+				}
 			}
-			if len(namespaces) == 0 {
+			if len(namespaces) == 0 && !asJSON {
 				fmt.Fprintln(cmd.OutOrStdout(), "No saved accounts. Log in with ta login -T qr.")
+			}
+			if asJSON {
+				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(rows); err != nil {
+					return err
+				}
 			}
 			return errors.Join(failures...)
 		},
 	}
+	command.Flags().BoolVar(&asJSON, "json", false, "output saved accounts as JSON")
+	return command
 }
 
 func readSavedAccount(ctx context.Context, namespace string) (int64, string, error) {

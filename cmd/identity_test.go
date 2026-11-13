@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -87,5 +88,30 @@ func TestAccountLookupRestoresSelectedNamespaceAfterBusySession(t *testing.T) {
 	var busy *sessionBusyError
 	if !errors.As(err, &busy) || viper.GetString("ns") != "default" {
 		t.Fatalf("err=%v selected=%s", err, viper.GetString("ns"))
+	}
+}
+
+func TestAccountsJSONKeepsPartialRowsOnFailure(t *testing.T) {
+	command := newAccounts(func(context.Context) ([]string, error) { return []string{"ready", "expired"}, nil }, func(_ context.Context, name string) (int64, string, error) {
+		if name == "expired" {
+			return 0, "", errors.New("revoked")
+		}
+		return 42, "synthetic", nil
+	})
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetArgs([]string{"--json"})
+	if err := command.ExecuteContext(context.Background()); err == nil {
+		t.Fatal("partial failure was hidden")
+	}
+	var rows []struct {
+		Namespace, Status string
+		ID                int64
+	}
+	if err := json.Unmarshal(output.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[0].ID != 42 || rows[1].Status != "unavailable" {
+		t.Fatal("partial rows lost")
 	}
 }
