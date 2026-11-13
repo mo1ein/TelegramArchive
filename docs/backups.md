@@ -48,7 +48,7 @@ Install a real cron job using ta commands:
 ```sh
 # Back up now, then sync every six hours.
 ta cron add my-channel --chat "channel_username" --every 6h \
-  --media all --format both --output ./data --run-now
+  --media all --format both --output ./data --run-now --at-startup
 
 # All chats, media and separate account data, once a day.
 ta cron add everything --everything --every 24h --format both --run-now
@@ -66,6 +66,13 @@ If another backup is using the same output folder, `--run-now` and `ta cron run 
 wait for it to finish. Ctrl+C cancels waiting and keeps the installed cron job.
 Automatic cron runs skip a busy output folder, and triggers are also skipped while
 the same job is running. Failed jobs retry at the next scheduled time.
+
+Cron only runs at scheduled times while the computer is on. It does not replay
+backups missed while the computer was off or asleep. Add `--at-startup` to also
+run one incremental backup when the system starts, keeping the regular schedule.
+Startup runs wait for a shared output folder so each job gets a turn. They use
+the saved login and settings, so no terminal needs to be open. Add or update the
+same job without `--at-startup` to remove its startup trigger.
 
 The last line of a completed job starts with `Finished job "NAME"`. It reports
 the result, downloaded/reused/filtered/failed/unavailable file totals, finish time
