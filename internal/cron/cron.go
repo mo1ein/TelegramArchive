@@ -19,6 +19,7 @@ type Job struct {
 	ResultFile  string            `json:"-"` // Private per-invocation child result; never saved.
 	Name        string            `json:"name"`
 	Schedule    string            `json:"schedule"`
+	AtStartup   bool              `json:"at_startup,omitempty"`
 	Executable  string            `json:"executable"`
 	Directory   string            `json:"directory"`
 	Arguments   []string          `json:"arguments"`
@@ -82,7 +83,14 @@ func (m Manager) Line(job Job) (string, error) {
 	if len(strings.Fields(job.Schedule)) != 5 || strings.ContainsAny(job.Schedule, "\r\n") {
 		return "", fmt.Errorf("invalid cron schedule")
 	}
-	return job.Schedule + " " + quote(job.Executable) + " cron run --file " + quote(m.File(job.Name)) + " > /dev/null 2>&1", nil
+	command := quote(job.Executable) + " cron run --file " + quote(m.File(job.Name))
+	line := job.Schedule + " " + command + " > /dev/null 2>&1"
+	if job.AtStartup {
+		// Startup jobs all launch together. Wait for shared output folders so
+		// each gets a catch-up run, rather than skipping until the next tick.
+		line += "\n@reboot " + command + " --skip-busy=false > /dev/null 2>&1"
+	}
+	return line, nil
 }
 
 func begin(name string) string { return "# ta cron begin " + name }
@@ -96,10 +104,14 @@ func replace(table, name, line string) (string, error) {
 			out.WriteString(lines[i])
 			continue
 		}
-		if i+2 >= len(lines) || strings.TrimSpace(lines[i+2]) != end(name) {
+		last := i + 2
+		if last < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[last]), "@reboot ") {
+			last++
+		}
+		if last >= len(lines) || strings.TrimSpace(lines[last]) != end(name) {
 			return "", fmt.Errorf("cron block for %q is damaged; leaving your crontab unchanged", name)
 		}
-		i += 2
+		i = last
 	}
 	if line != "" {
 		if out.Len() > 0 && !strings.HasSuffix(out.String(), "\n") {

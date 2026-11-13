@@ -2,8 +2,10 @@ package cron
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -113,6 +115,95 @@ func TestInstallFailureRollsBackAndReadErrorsNeverOverwrite(t *testing.T) {
 	}
 	if _, err := os.Stat(m.File(job.Name)); !os.IsNotExist(err) {
 		t.Fatal("failed job left installed settings")
+	}
+}
+
+func TestStartupJobKeepsScheduleAndCanBeUpdatedAndRemoved(t *testing.T) {
+	dir := t.TempDir()
+	table := &memoryTable{content: "MAILTO=operator@example.test\n17 3 * * * /usr/bin/true\n"}
+	original := table.content
+	m := Manager{Directory: filepath.Join(dir, "jobs"), Table: table}
+	job := sampleJob(dir)
+	// Use the saved representation to also cover loading an enabled startup job.
+	if err := json.Unmarshal([]byte(`{"at_startup":true}`), &job); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := m.Install(context.Background(), job); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(table.content, original) || strings.Count(table.content, begin(job.Name)) != 1 {
+			t.Fatalf("startup install changed other jobs or duplicated the block: %s", table.content)
+		}
+		if strings.Count(table.content, job.Schedule+" ") != 1 || strings.Count(table.content, "@reboot ") != 1 {
+			t.Fatalf("job must run on its schedule and once at startup: %s", table.content)
+		}
+		startup := strings.Split(strings.Split(table.content, "@reboot ")[1], "\n")[0]
+		if !strings.Contains(startup, "cron run --file "+quote(m.File(job.Name))) || !strings.Contains(startup, "--skip-busy=false") {
+			t.Fatalf("startup must run the saved job and wait for shared output folders: %s", startup)
+		}
+		var err error
+		job, err = ReadJob(m.File(job.Name))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.Remove(context.Background(), job.Name); err != nil || table.content != original {
+		t.Fatalf("removing startup job changed unrelated entries: %v, %s", err, table.content)
+	}
+	if err := m.Install(context.Background(), job); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(`{"at_startup":false}`), &job); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Install(context.Background(), job); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(table.content, "@reboot") || strings.Count(table.content, job.Schedule+" ") != 1 {
+		t.Fatalf("disabling startup lost the schedule or kept the startup entry: %s", table.content)
+	}
+}
+
+func TestDamagedStartupBlockIsNeverOverwritten(t *testing.T) {
+	for _, block := range []string{
+		"# ta cron begin channel\n0 * * * * ta\n@reboot ta\n",
+		"# ta cron begin channel\n0 * * * * ta\nunrelated job\n# ta cron end channel\n",
+		"# ta cron begin channel\n0 * * * * ta\n@reboot ta\n# ta cron end another\n",
+	} {
+		if _, err := replace(block, "channel", "replacement"); err == nil {
+			t.Fatalf("damaged startup block was overwritten: %s", block)
+		}
+	}
+}
+
+func TestStartupEntryExecutesSavedJobWithQuotedPaths(t *testing.T) {
+	dir := t.TempDir()
+	job := sampleJob(dir)
+	job.AtStartup = true
+	job.Executable = filepath.Join(dir, "ta 'quoted'")
+	arguments := filepath.Join(dir, "arguments")
+	if err := os.WriteFile(job.Executable, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$TA_TEST_ARGUMENTS\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	m := Manager{Directory: filepath.Join(dir, "jobs 'quoted'")}
+	entries, err := m.Line(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(entries, "\n")
+	if len(lines) != 2 || !strings.HasPrefix(lines[1], "@reboot ") {
+		t.Fatalf("missing startup entry: %s", entries)
+	}
+	command := exec.Command("/bin/sh", "-c", strings.TrimPrefix(lines[1], "@reboot "))
+	command.Env = append(os.Environ(), "TA_TEST_ARGUMENTS="+arguments)
+	if err := command.Run(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(arguments)
+	want := "cron\nrun\n--file\n" + m.File(job.Name) + "\n--skip-busy=false\n"
+	if err != nil || string(got) != want {
+		t.Fatalf("startup ran the wrong arguments: %q, %v", got, err)
 	}
 }
 
