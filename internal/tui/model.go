@@ -8,7 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/progress"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/mo1ein/TelegramArchive/internal/taskui"
 )
 
 type screen int
@@ -34,10 +38,18 @@ type Model struct {
 	searching, advanced, editing, help bool
 	input                              []rune
 	cursor                             int
+	editor                             textinput.Model
+	meter                              progress.Model
+	loader                             spinner.Model
+	status                             *taskui.Progress
+	outputRevision                     uint64
+	syncedOutput                       bool
 	form                               Form
 	plan                               Plan
 	last                               finishedMsg
 	loading                            bool
+	pendingAction                      string
+	pendingSelection                   string
 	stage                              string
 	taskCancel                         context.CancelFunc
 	source                             *resultSnapshot
@@ -54,13 +66,36 @@ type Model struct {
 	buttonsFocused, responding, follow, cancelling bool
 	started                                        time.Time
 	err                                            string
+	accounts, accountSelection                     []string
+	accountLoader                                  AccountLoader
+	accountsLoaded                                 bool
+	accountError                                   string
+	picker                                         *choicePicker
+	batchIndex                                     int
+	batchResults                                   []accountOutcome
+	batchStarted                                   time.Time
+	selectedResults                                map[string]bool
+	pathDialog                                     *pathDialog
+	choosePath                                     func(context.Context, pathRequest) ([]string, error)
+	chatLookup                                     *chatLookup
+	chatChoiceKey                                  [32]byte
+	calendar                                       *datePicker
 }
 
-func New(actions []Action, base []string, namespace string, ctx context.Context) Model {
-	return Model{actions: actions, base: slices.Clone(base), globals: map[string]string{"ns": namespace}, ctx: ctx, run: RunCommand, width: 100, height: 32}
+func New(actions []Action, base []string, namespace string, ctx context.Context, options ...Option) Model {
+	m := Model{actions: actions, base: slices.Clone(base), globals: map[string]string{"ns": namespace}, ctx: ctx, run: RunCommand, width: 100, height: 32,
+		editor: textinput.New(), meter: newProgress(),
+		loader: spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(accent)), choosePath: chooseNativePath}
+	if namespace != "" {
+		m.accounts, m.accountSelection = []string{namespace}, []string{namespace}
+	}
+	for _, option := range options {
+		option(&m)
+	}
+	return m
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd { return m.loadAccounts() }
 
 func (m Model) filteredActions() []Action {
 	var out []Action
@@ -98,6 +133,11 @@ func (m Model) visibleFields() []int {
 		if !m.advanced && field.Advanced && m.fieldSearch == "" {
 			continue
 		}
+		if !m.advanced && m.fieldSearch == "" && strings.Join(m.form.Action.Path, " ") == "login" && (field.Name == "desktop" || field.Name == "passcode") {
+			if method := m.form.field("type"); method != nil && method.Value != "desktop" {
+				continue
+			}
+		}
 		if matches(field.Label+" "+field.Name+" "+field.Help, m.fieldSearch) {
 			out = append(out, i)
 		}
@@ -106,7 +146,14 @@ func (m Model) visibleFields() []int {
 }
 
 func (m *Model) open(action Action) {
+	m.calendar = nil
+	m.closePathDialog()
+	m.closePicker()
+	m.chatChoiceKey = [32]byte{}
 	m.form = NewForm(action, m.globals)
+	m.configureAccountField()
+	m.configureChatField()
+	m.picker = nil
 	m.screen, m.focus, m.scroll, m.err = configure, 0, 0, ""
 	m.advanced, m.editing, m.searching = false, false, false
 	m.fieldSearch = ""
@@ -116,9 +163,69 @@ func (m *Model) open(action Action) {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Remember the viewport just displayed before moving the cursor. Clicking
+	// a visible checkbox must leave the list in the same place under the mouse.
+	if m.inlinePicker() {
+		p := m.picker
+		p.offset = choiceListWindow(m.inlineChoiceBounds().height, len(p.filtered()), p.cursor, p.offset).start
+	}
 	switch msg := msg.(type) {
+	case chatLookupStartedMsg:
+		return m, m.chatLookupStarted(msg)
+	case chatLookupPollMsg:
+		return m, m.pollChatChoices(msg.lookup)
+	case pathSelectedMsg:
+		return m, m.pathDialogResult(msg)
+	case pathDirectoryMsg:
+		if m.pathDialog != msg.dialog || msg.dialog.browser == nil || msg.dialog.browser.revision != msg.revision {
+			return m, nil
+		}
+		b := m.pathDialog.browser
+		b.loading, b.entries = false, msg.entries
+		if msg.err != nil {
+			b.err = safeText(msg.err.Error())
+		}
+		return m, nil
+	case accountsLoadedMsg:
+		previousAccount := ""
+		if field := m.form.field("ns"); field != nil {
+			previousAccount = field.Value
+		}
+		m.accountsLoaded = true
+		m.accountError = ""
+		if msg.err != nil {
+			m.accountError = msg.err.Error()
+		} else {
+			m.accounts = slices.Clone(msg.names)
+		}
+		if m.screen == configure {
+			m.configureAccountField()
+			if field := m.form.field("ns"); field != nil && field.Value != previousAccount {
+				m.resetChatSelection()
+			}
+		}
+		if m.picker != nil && m.picker.field == "ns" {
+			m.picker.choices = slices.Clone(m.accounts)
+			m.picker.cursor = 0
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.pathDialog != nil && m.pathDialog.browser != nil {
+			b := m.pathDialog.browser
+			b.query.SetWidth(max(1, m.width-7))
+			b.name.SetWidth(max(1, m.width-16))
+			b.query, _ = b.query.Update(nil)
+			b.name, _ = b.name.Update(nil)
+		}
+		if m.picker != nil {
+			m.picker.query.SetWidth(max(1, min(60, m.formLayout(m.width-4, m.height-9).controlWidth)-5))
+			m.picker.query, _ = m.picker.query.Update(nil)
+		}
+		if m.editing || m.searching {
+			m.editor.SetWidth(m.editorWidth())
+			m.editor, _ = m.editor.Update(nil)
+		}
 		if m.job != nil {
 			m.job.mu.Lock()
 			if m.job.resize != nil {
@@ -129,6 +236,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.job.mu.Unlock()
 		}
 		return m, nil
+	case progress.FrameMsg:
+		if m.screen != running {
+			return m, nil
+		}
+		var command tea.Cmd
+		m.meter, command = m.meter.Update(msg)
+		return m, command
 	case startedMsg:
 		m.job = msg.job
 		if m.cancelling {
@@ -145,12 +259,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.job == nil {
 			return m, nil
 		}
+		m.loader, _ = m.loader.Update(m.loader.Tick())
 		m.job.mu.Lock()
-		m.output = redactOutput(m.job.terminal.text())
-		m.progress = append([]string(nil), m.job.terminal.progress...)
+		if !m.syncedOutput || m.outputRevision != m.job.revision {
+			m.output = redactOutput(m.job.terminal.text())
+			m.progress = append([]string(nil), m.job.terminal.progress...)
+			if m.job.terminal.status != nil {
+				status := *m.job.terminal.status
+				m.status = &status
+			}
+			m.outputRevision, m.syncedOutput = m.job.revision, true
+		}
 		m.stage = m.job.stage
 		if m.job.streamSeen {
-			m.data = resultData{Kind: "chat ls", Items: append([]item(nil), m.job.items...)}
+			if m.data.Kind != "chat ls" || len(m.data.Items) != len(m.job.items) {
+				m.data = resultData{Kind: "chat ls", Items: append([]item(nil), m.job.items...)}
+			}
 			if len(m.data.Items) > 0 {
 				m.screen = result
 				m.loading = !m.job.done
@@ -183,12 +307,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.taskCancel != nil {
 				m.taskCancel()
 			}
+			if command, handled := m.finishAccount(m.last); handled {
+				return m, command
+			}
 			m.responding = false
 			m.buttonFocus = 0
 			if m.data.Kind == "" || (m.last.err != nil && len(m.data.Items) == 0) {
 				m.resultTab = 1
 			}
+			if m.pendingAction != "" {
+				action := m.pendingAction
+				rows := m.resultItems()
+				selected := slices.IndexFunc(rows, func(row item) bool { return row.ID == m.pendingSelection })
+				if selected < 0 {
+					m.resultSearch = ""
+					selected = slices.IndexFunc(m.resultItems(), func(row item) bool { return row.ID == m.pendingSelection })
+				}
+				m.resultSelected = max(0, selected)
+				m.pendingAction = ""
+				m.pendingSelection = ""
+				m.cancelling = false
+				return m, m.activate(action)
+			}
 			return m, nil
+		}
+		if m.status != nil && m.status.Determinate && m.meter.Percent() != m.status.Percent {
+			return m, tea.Batch(poll(), m.meter.SetPercent(m.status.Percent))
 		}
 		return m, poll()
 	case inputErrorMsg:
@@ -197,13 +341,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.MouseClickMsg:
+		if m.pathDialog != nil {
+			return m.pathDialogClick(msg)
+		}
+		if m.picker != nil {
+			return m.pickerClick(msg)
+		}
+		if m.calendar != nil {
+			return m.datePickerClick(msg)
+		}
 		return m.mouseClick(msg)
 	case tea.MouseWheelMsg:
 		delta := 3
 		if msg.Button == tea.MouseWheelUp {
 			delta = -3
 		}
-		if m.screen == result && m.resultTab == 0 {
+		if m.calendar != nil {
+			if m.calendarBounds().contains(msg.X, msg.Y) {
+				m.calendar.moveMonth(delta / 3)
+			}
+			return m, nil
+		}
+		if m.pathDialog != nil {
+			if b := m.pathDialog.browser; b != nil {
+				b.cursor = max(0, min(max(0, len(b.filtered())-1), b.cursor+delta))
+			}
+			return m, nil
+		}
+		if m.picker != nil {
+			if !m.inlinePicker() || m.inlineChoiceBounds().contains(msg.X, msg.Y) {
+				step := delta
+				if m.inlinePicker() {
+					p := m.picker
+					rows := choiceListWindow(m.inlineChoiceBounds().height, len(p.filtered()), p.cursor, p.offset).rows
+					step = min(3, rows)
+					if delta < 0 {
+						step = -step
+					}
+				}
+				m.picker.cursor = max(0, min(max(0, len(m.picker.filtered())-1), m.picker.cursor+step))
+				return m, nil
+			}
+			m.applyPicker()
+			if m.picker != nil {
+				return m, nil
+			}
+		}
+		if m.screen == configure && !m.searching {
+			if m.saveInput() {
+				m.focus = max(0, min(max(0, len(m.visibleFields())-1), m.focus+delta))
+			}
+		} else if m.screen == result && m.resultTab == 0 {
 			m.resultSelected = max(0, min(max(0, len(m.resultItems())-1), m.resultSelected+delta))
 		} else if m.screen == running || m.screen == result {
 			m.scrollActivity(delta)
@@ -215,26 +403,78 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.taskCancel != nil {
 			m.taskCancel()
 		}
+		if command, handled := m.finishAccount(msg); handled {
+			return m, command
+		}
 		m.resultTab = 1
 		m.last, m.screen, m.scroll = msg, result, 0
 		return m, nil
 	case tea.PasteMsg:
+		if m.calendar != nil {
+			m.typeDate()
+			return m, m.updateEditor(msg)
+		}
+		if m.pathDialog != nil {
+			if b := m.pathDialog.browser; b != nil {
+				if b.naming {
+					b.name, _ = b.name.Update(msg)
+				} else {
+					b.searching = true
+					b.query.Focus()
+					b.query, _ = b.query.Update(msg)
+					b.cursor = 0
+				}
+			}
+			return m, nil
+		}
+		if m.picker != nil {
+			m.picker.searching = true
+			m.picker.query.Focus()
+			m.picker.query, _ = m.picker.query.Update(msg)
+			m.picker.cursor = 0
+			return m, nil
+		}
 		if m.screen == running && m.responding && m.job != nil {
 			return m, m.sendInput(msg.Content)
 		}
+		if !m.editing && !m.searching && m.screen == configure {
+			fields := m.visibleFields()
+			if len(fields) > 0 && choiceField(m.form.Fields[fields[m.focus]]) {
+				command := m.openPicker(m.form.Fields[fields[m.focus]])
+				m.picker.searching = true
+				m.picker.query.Focus()
+				m.picker.query, _ = m.picker.query.Update(msg)
+				return m, command
+			}
+			if len(fields) > 0 && m.form.Fields[fields[m.focus]].Type != "bool" && len(m.form.Fields[fields[m.focus]].Choices) == 0 {
+				m.editField()
+			}
+		}
 		if m.editing || m.searching {
-			m.insert(strings.NewReplacer("\n", " ", "\r", " ", "\t", " ").Replace(msg.Content))
-			m.syncSearch()
+			return m, m.updateEditor(msg)
 		}
 		return m, nil
 	case tea.KeyPressMsg:
 		key := msg.String()
+		if m.pathDialog != nil {
+			return m.updatePathDialog(msg)
+		}
 		if key == "ctrl+c" {
+			if m.chatLookup != nil {
+				m.stopChatLookup()
+				return m, nil
+			}
 			if m.screen == running || m.loading {
 				m.cancelJob()
 				return m, nil
 			}
 			return m, tea.Quit
+		}
+		if m.picker != nil {
+			return m.updatePicker(msg)
+		}
+		if m.calendar != nil {
+			return m.updateDatePicker(msg)
 		}
 		if m.screen == running && m.responding {
 			if key == "esc" {
@@ -267,6 +507,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key == "f6" {
 			m.buttonsFocused = !m.buttonsFocused
 			m.buttonFocus = 0
+			return m, nil
+		}
+		if m.screen == configure && m.buttonsFocused && key == "shift+tab" {
+			m.buttonsFocused = false
 			return m, nil
 		}
 		if m.buttonsFocused && (key == "tab" || key == "shift+tab") {
@@ -335,7 +579,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected, m.search = 0, ""
 			case "/":
 				m.searching = true
-				m.input, m.cursor = []rune(m.search), len([]rune(m.search))
+				m.startInput(m.search, "Search workflows…", false)
 			case "esc":
 				m.search, m.selected = "", 0
 			case "enter":
@@ -349,6 +593,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case configure:
 			fields := m.visibleFields()
+			m.focus = max(0, min(max(0, len(fields)-1), m.focus))
 			switch key {
 			case "esc":
 				if m.source != nil && m.fieldSearch == "" {
@@ -360,10 +605,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.screen, m.err = dashboard, ""
 				}
-			case "up", "k", "shift+tab":
+			case "up", "shift+tab":
 				m.focus = max(0, m.focus-1)
-			case "down", "j", "tab":
-				m.focus = min(max(0, len(fields)-1), m.focus+1)
+			case "down", "tab":
+				if key == "tab" && m.focus == len(fields)-1 {
+					m.buttonsFocused, m.buttonFocus = true, 1
+				} else {
+					m.focus = min(max(0, len(fields)-1), m.focus+1)
+				}
 			case "pgdown":
 				m.focus = min(max(0, len(fields)-1), m.focus+8)
 			case "pgup":
@@ -371,17 +620,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "ctrl+a":
 				m.advanced = !m.advanced
 				m.focus = 0
-			case "/":
+			case "ctrl+f":
 				m.searching = true
-				m.input, m.cursor = []rune(m.fieldSearch), len([]rune(m.fieldSearch))
-			case "ctrl+r":
+				m.startInput(m.fieldSearch, "Find an option…", false)
+			case "ctrl+r", "ctrl+enter":
 				m.prepareReview()
+			case "alt+o":
+				if len(fields) > 0 {
+					return m, m.openPathDialog(m.form.Fields[fields[m.focus]])
+				}
 
 			case "enter", "space", " ", "right", "left":
 				if len(fields) == 0 {
 					break
 				}
 				field := &m.form.Fields[fields[m.focus]]
+				if dateField(*field) && key != "left" {
+					m.openDatePicker(*field)
+					return m, nil
+				}
+				if field.PathKind != "" && key == "enter" {
+					return m, m.openPathDialog(*field)
+				}
 				if field.Type == "bool" {
 					if field.Value == "true" {
 						field.Value = "false"
@@ -389,14 +649,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						field.Value = "true"
 					}
 					field.Dirty, m.err = true, ""
-				} else if key != "enter" && len(field.Choices) > 0 && !strings.Contains(field.Type, "Slice") {
+					m.form.reconcileSelection(field.Name)
+				} else if choiceField(*field) {
+					if field.Multi && key == "left" {
+						return m, nil
+					}
+					if field.Multi || key == "enter" || field.Type == "accounts" {
+						return m, m.openPicker(*field)
+					}
 					next := slices.Index(field.Choices, field.Value) + 1
 					if key == "left" {
 						next -= 2
 					}
 					field.Value, field.Dirty = field.Choices[(next+len(field.Choices))%len(field.Choices)], true
 				} else {
-					m.input, m.cursor, m.editing = []rune(field.Value), len([]rune(field.Value)), true
+					m.editField()
+				}
+			default:
+				if msg.Text != "" && len(fields) > 0 {
+					field := m.form.Fields[fields[m.focus]]
+					if choiceField(field) {
+						command := m.openPicker(field)
+						next, _ := m.updatePicker(msg)
+						return next, command
+					}
+					if field.Type != "bool" && len(field.Choices) == 0 {
+						m.editField()
+						return m, m.updateEditor(msg)
+					}
 				}
 			case "ctrl+d":
 				if len(fields) > 0 {
@@ -418,12 +698,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scroll++
 			}
 		case result:
-			if m.loading && (key == "esc" || key == "e" || key == "r" || key == "a" || key == "s") {
+			if m.loading && (key == "esc" || key == "e" || key == "r" || key == "s") {
 				m.cancelJob()
 				return m, nil
 			}
 			rows := m.resultItems()
 			switch key {
+			case "space", " ":
+				if (m.data.Kind == "accounts" || m.data.Kind == "chat ls") && len(rows) > 0 {
+					row := rows[m.resultSelected]
+					if m.data.Kind == "accounts" && row.Status != "ready" {
+						m.err = "Choose an available account."
+						break
+					}
+					if m.selectedResults == nil {
+						m.selectedResults = map[string]bool{}
+					}
+					m.selectedResults[row.ID] = !m.selectedResults[row.ID]
+				}
+			case "b":
+				if m.data.Kind == "accounts" {
+					return m, m.activate("backup-selected")
+				}
 			case "esc":
 				if m.resultSearch != "" {
 					m.resultSearch = ""
@@ -462,8 +758,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.resultSelected = min(max(0, len(rows)-1), m.resultSelected+8)
 			case "/":
 				m.searching = true
-				m.input = []rune(m.resultSearch)
-				m.cursor = len(m.input)
+				m.startInput(m.resultSearch, "Search this list…", false)
 			case "l":
 				m.resultTab = 1
 				m.scroll = 0
@@ -493,74 +788,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
-}
-
-func (m Model) updateInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		if m.searching {
-			m.input = nil
-			m.syncSearch()
-		}
-		m.editing, m.searching = false, false
-	case "enter":
-		if m.editing {
-			fields := m.visibleFields()
-			if len(fields) > 0 {
-				field := &m.form.Fields[fields[m.focus]]
-				field.Value, field.Dirty = string(m.input), true
-				m.err = ""
-			}
-		}
-		m.editing, m.searching = false, false
-	case "left":
-		m.cursor = max(0, m.cursor-1)
-	case "right":
-		m.cursor = min(len(m.input), m.cursor+1)
-	case "home", "ctrl+a":
-		m.cursor = 0
-	case "end", "ctrl+e":
-		m.cursor = len(m.input)
-	case "backspace":
-		if m.cursor > 0 {
-			m.input = slices.Delete(m.input, m.cursor-1, m.cursor)
-			m.cursor--
-		}
-	case "delete":
-		if m.cursor < len(m.input) {
-			m.input = slices.Delete(m.input, m.cursor, m.cursor+1)
-		}
-	case "ctrl+u":
-		m.input, m.cursor = nil, 0
-	case "ctrl+k":
-		m.input = m.input[:m.cursor]
-	case "ctrl+w":
-		start := m.cursor
-		for start > 0 && m.input[start-1] == ' ' {
-			start--
-		}
-		for start > 0 && m.input[start-1] != ' ' {
-			start--
-		}
-		m.input = slices.Delete(m.input, start, m.cursor)
-		m.cursor = start
-	case "tab":
-		if m.editing {
-			m.completePath()
-		}
-	default:
-		if msg.Text != "" {
-			m.insert(msg.Text)
-		}
-	}
-	m.syncSearch()
-	return m, nil
-}
-
-func (m *Model) insert(value string) {
-	runes := []rune(value)
-	m.input = slices.Insert(m.input, m.cursor, runes...)
-	m.cursor += len(runes)
 }
 
 func (m *Model) syncSearch() {

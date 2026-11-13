@@ -11,36 +11,46 @@ import (
 
 func (m Model) taskView(width, height int) string {
 	if m.screen == running {
-		spinner := []string{"◐", "◓", "◑", "◒"}[int(time.Since(m.started).Milliseconds()/150)%4]
-		heading := spinner + " Working"
+		heading := "Working"
 		if m.stage != "" {
-			heading = spinner + " " + m.stage
+			heading = m.stage
 		}
 		if m.cancelling {
-			heading = "◐ Cancelling…"
+			heading = "Stopping safely…"
 		}
-		lines := []string{accent.Render(heading) + dim.Render("   "+time.Since(m.started).Round(time.Second).String()), "", titleStyle.Render(m.plan.Title), dim.Render("Task stays here · Ctrl+C cancels without closing the workspace"), ""}
+		elapsed := time.Since(m.started).Round(time.Second).String()
+		title := m.plan.Title
+		if len(m.plan.Tasks) > 0 {
+			title = fmt.Sprintf("Account %d / %d · %s", m.batchIndex+1, len(m.plan.Tasks), m.plan.Tasks[m.batchIndex].Account)
+		}
+		lines := []string{accent.Render(m.loader.View()+" "+clip(heading, width-len(elapsed)-4)) + dim.Render("  "+elapsed), titleStyle.Render(clip(title, width)), ""}
+		if m.status != nil {
+			lines = append(lines, m.progressView(width), "")
+		} else if len(m.progress) == 3 {
+			lines = append(lines, clip(m.progress[0], width), accent.Render(clip(m.progress[1], width)), dim.Render(clip(m.progress[2], width)), "")
+		}
+		activity := "ACTIVITY"
 		if m.responding {
-			lines = append(lines, accent.Render("INPUT ACTIVE · Type your response; Enter submits · Esc returns to controls"))
-		} else {
-			lines = append(lines, dim.Render("Choose Respond (i) if the task asks for input. Passwords stay masked by the prompt."))
+			activity = "INPUT ACTIVE · Enter submits · Esc returns to controls"
+		} else if m.status == nil {
+			activity += " · i to respond to a prompt"
 		}
-		lines = append(lines, "")
-		if len(m.progress) == 3 {
-			lines = append(lines, selectedStyle.Width(width).Render(m.progress[0]), accent.Render(m.progress[1]), dim.Render(m.progress[2]), "")
-		}
+		lines = append(lines, dim.Render(clip(activity, width)))
 		output := m.output
 		if output == "" {
-			if len(m.progress) > 0 {
-				output = "Activity will appear here as files finish."
-			} else {
-				output = "Preparing the task…"
-				if len(m.plan.Path) > 0 && m.plan.Path[0] == "chat" {
-					output = "Connecting to Telegram · the browser will show each page as it arrives."
-				}
+			output = "Preparing your backup…"
+			if m.status != nil {
+				output = "Files and updates will appear here."
+			}
+			if len(m.plan.Path) > 0 && m.plan.Path[0] == "chat" {
+				output = "Connecting to Telegram. Chats appear as each page arrives."
 			}
 		}
-		available := max(1, height-len(lines)-2)
+		used := 0
+		for _, value := range lines {
+			used += lipgloss.Height(value)
+		}
+		available := max(1, height-used-1)
 		offset := m.scroll
 		if m.follow {
 			offset = max(0, len(strings.Split(output, "\n"))-available)
@@ -56,7 +66,7 @@ func (m Model) taskView(width, height int) string {
 		status = "✓ Chat list · saved " + m.cachedAt.Format("15:04:05")
 	}
 	if m.loading {
-		status = fmt.Sprintf("◐ Loading · %d chats available", len(m.data.Items))
+		status = fmt.Sprintf("%s Loading · %d chats available", m.loader.View(), len(m.data.Items))
 	}
 	style := accent
 	if m.last.err != nil {
@@ -65,6 +75,20 @@ func (m Model) taskView(width, height int) string {
 	}
 	if m.cancelling {
 		status = "■ Cancelled"
+	}
+	if m.data.Kind == "account backups" {
+		completed, failed, skipped := 0, 0, 0
+		for _, row := range m.data.Items {
+			switch row.Status {
+			case "completed":
+				completed++
+			case "failed":
+				failed++
+			default:
+				skipped++
+			}
+		}
+		status = fmt.Sprintf("%d completed · %d failed · %d not run", completed, failed, skipped)
 	}
 	elapsed := m.last.elapsed
 	if m.loading {
@@ -76,7 +100,7 @@ func (m Model) taskView(width, height int) string {
 	}
 	lines := []string{style.Render(status) + dim.Render(elapsedLabel), "", titleStyle.Render(m.plan.Title), ""}
 	if m.loading {
-		lines[3] = dim.Render(clip(m.stage+" · Stop loading to use a selected chat", width))
+		lines[3] = dim.Render(clip(m.stage+" · Select a chat and choose Archive when ready", width))
 	}
 	tabs := []string{"Results", "Activity", "Details"}
 	parts := []string{}
@@ -119,6 +143,9 @@ func (m Model) taskView(width, height int) string {
 		}
 		rows := m.resultItems()
 		search := dim.Render(fmt.Sprintf("%d items · / search · ↑↓ select · Enter details", len(rows)))
+		if m.data.Kind == "accounts" || m.data.Kind == "chat ls" {
+			search = dim.Render(fmt.Sprintf("%d items · %d checked · Space check · / search", len(rows), len(m.checkedResults())))
+		}
 		if m.searching {
 			search = accent.Render("/ ") + m.inputView(width-3, false)
 		} else if m.resultSearch != "" {
@@ -130,12 +157,22 @@ func (m Model) taskView(width, height int) string {
 		for i := start; i < min(len(rows), start+page); i++ {
 			row := rows[i]
 			marker := "  "
+			check := ""
+			if m.data.Kind == "accounts" || m.data.Kind == "chat ls" {
+				check = "[ ] "
+				if m.selectedResults[row.ID] {
+					check = "[x] "
+				}
+				if m.data.Kind == "accounts" && row.Status != "ready" {
+					check = "[-] "
+				}
+			}
 			style := textStyle
 			if i == m.resultSelected {
 				marker = "▸ "
 				style = selectedStyle.Bold(true).Width(width)
 			}
-			lines = append(lines, style.Render(clip(marker+row.Title, width)), dim.Render(clip("  "+row.Subtitle, width)))
+			lines = append(lines, style.Render(clip(marker+check+row.Title, width)), dim.Render(clip("  "+row.Subtitle, width)))
 		}
 		if len(rows) == 0 && len(m.data.Metrics) == 0 {
 			message := "No results. Try changing the filters or refreshing."

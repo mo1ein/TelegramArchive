@@ -46,6 +46,7 @@ type job struct {
 	pending              []byte
 	items                []item
 	seen                 map[string]bool
+	revision             uint64
 }
 
 const captureLimit = 4 << 20
@@ -59,6 +60,7 @@ func (w jobWriter) Write(p []byte) (int, error) {
 	j := w.job
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	j.revision++
 	if !w.stdout || !j.structured {
 		j.terminal.write(p)
 	}

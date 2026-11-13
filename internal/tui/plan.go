@@ -16,6 +16,7 @@ type Plan struct {
 	Args          []string
 	Path          []string
 	width, height int
+	Tasks         []AccountTask
 }
 
 func (f Form) Plan(base []string) (Plan, error) {
@@ -32,6 +33,9 @@ func (f Form) Plan(base []string) (Plan, error) {
 	}
 	var local, positionals []string
 	for _, field := range f.Fields {
+		if field.Name == "ns" && field.Type == "accounts" {
+			continue
+		}
 		if field.Type == "arguments" {
 			var err error
 			positionals, err = shellquote.Split(field.Value)
@@ -97,7 +101,7 @@ func (f Form) Plan(base []string) (Plan, error) {
 		}
 		plan.Args = append(plan.Args, positionals...)
 	}
-	return plan, nil
+	return f.withAccounts(plan)
 }
 
 func validate(field Field) error {
@@ -152,8 +156,26 @@ func validate(field Field) error {
 	if err != nil {
 		return err
 	}
-	if len(field.Choices) > 0 && !strings.Contains(field.Type, "Slice") && !slices.Contains(field.Choices, field.Value) {
-		return fmt.Errorf("choose %s", strings.Join(field.Choices, ", "))
+	if len(field.Choices) > 0 && !field.AllowCustom {
+		values := []string{field.Value}
+		if field.Multi {
+			values, err = readCSV(field.Value)
+			if err != nil {
+				return err
+			}
+		}
+		for _, value := range values {
+			if !slices.Contains(field.Choices, value) {
+				return fmt.Errorf("choose one of the listed options")
+			}
+		}
+		if field.Multi && len(values) > 1 {
+			for _, value := range values {
+				if specialChoice(field.Name, value) {
+					return fmt.Errorf("choose All, None, or individual options")
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -180,6 +202,15 @@ func validDate(value string) bool {
 // Preview is suitable for display and never exposes credentials in global flags.
 // Execution uses Args directly; no command string is evaluated by a shell.
 func (p Plan) Preview() string {
+	if len(p.Tasks) > 0 {
+		var lines []string
+		for _, task := range p.Tasks {
+			copy := p
+			copy.Args, copy.Tasks = task.Args, nil
+			lines = append(lines, copy.Preview())
+		}
+		return strings.Join(lines, "\n")
+	}
 	args := append([]string{"ta"}, p.Args...)
 	secretNext := false
 	for i, arg := range args {

@@ -70,9 +70,9 @@ func newBackupProgress(output io.Writer) *backupProgress {
 					width = columns
 				}
 			}
-			lines := p.lines(time.Now(), width)
+			lines, status := p.frame(time.Now(), width)
 			if terminal && os.Getenv("TA_TUI_CHILD") == "1" {
-				taskui.WriteProgress(output, lines)
+				taskui.WriteStatus(output, status)
 				return
 			}
 			if terminal {
@@ -175,6 +175,11 @@ func (p *backupProgress) finish(err error) {
 }
 
 func (p *backupProgress) lines(now time.Time, width int) []string {
+	lines, _ := p.frame(now, width)
+	return lines
+}
+
+func (p *backupProgress) frame(now time.Time, width int) ([]string, taskui.Progress) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	paint := func(color text.Color, value string) string {
@@ -275,7 +280,9 @@ func (p *backupProgress) lines(now time.Time, width int) []string {
 		paint(labelColor, runewidth.Truncate(label, limit, "…")),
 		text.Snip(bar, limit, "…"),
 		text.Snip(metrics, limit, "…"),
-	}
+	}, taskui.Progress{Label: label, Detail: size, Summary: metrics,
+		Percent: percent / 100, Determinate: p.plan.Ready || p.finished,
+		CompletedFiles: p.completeFiles, TotalFiles: p.plan.Files}
 }
 
 func formatProgressBytes(bytes int64) string {

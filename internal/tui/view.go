@@ -38,11 +38,17 @@ func (m Model) View() tea.View {
 			if namespace == "" {
 				namespace = "inherited"
 			}
-			right := dim.Render("namespace ") + accent.Render(clip(namespace, 18))
+			right := dim.Render("account ") + accent.Render(clip(namespace, 18))
 			header += strings.Repeat(" ", max(1, width-lipgloss.Width(header)-lipgloss.Width(right))) + right
 		}
 		var body string
-		if m.help {
+		if m.pathDialog != nil {
+			body = m.pathDialogView(width, height)
+		} else if m.calendar != nil && !m.inlineCalendar() {
+			body = m.datePickerView()
+		} else if m.picker != nil && !m.inlinePicker() {
+			body = m.pickerView(width, height)
+		} else if m.help {
 			body = m.helpView(width, height)
 		} else {
 			switch m.screen {
@@ -77,11 +83,17 @@ func (m Model) dashboardView(width, height int) string {
 	}
 	sideWidth := 20
 	var nav strings.Builder
-	nav.WriteString(dim.Render("WORKSPACE") + "\n\n")
+	nav.WriteString(dim.Render("YOUR ARCHIVE") + "\n\n")
 	for i, name := range Groups {
-		label := "  " + name
+		display := name
+		if name == "Quick start" {
+			display = "Start here"
+		} else if name == "All commands" {
+			display = "Command library"
+		}
+		label := "  " + display
 		if i == m.group {
-			label = "▸ " + name
+			label = "▸ " + display
 			nav.WriteString(selectedStyle.Width(sideWidth).Render(label))
 		} else {
 			nav.WriteString(dim.Render(label))
@@ -89,7 +101,7 @@ func (m Model) dashboardView(width, height int) string {
 		nav.WriteString("\n\n")
 	}
 	if height >= 23 {
-		nav.WriteString("\n" + dim.Render("YOUR NEXT BACKUP,\nA FEW KEYS AWAY.\n\n/ Search everything\n? Keyboard guide"))
+		nav.WriteString("\n" + dim.Render("/ Search workflows\nTab Change section\nEnter Open selected\n? Keyboard guide"))
 	}
 	mainWidth := width - sideWidth - 3
 	body := m.actionList(mainWidth, height)
@@ -98,124 +110,52 @@ func (m Model) dashboardView(width, height int) string {
 
 func (m Model) actionList(width, height int) string {
 	actions := m.filteredActions()
-	heading := "Choose a workflow"
+	heading, description := "What would you like to back up?", "Choose a task. We’ll guide you through the settings."
 	if m.search != "" {
-		heading = "Search results"
+		heading, description = "Find your next task", "Search matches names and descriptions across every section."
 	} else if Groups[m.group] != "Quick start" {
-		heading = Groups[m.group]
+		heading, description = Groups[m.group], "Every command is available here, including installed extensions."
 	}
-	count := dim.Render(fmt.Sprintf("%d available", len(actions)))
-	header := titleStyle.Render(heading)
+	count := dim.Render(fmt.Sprintf("%d tasks", len(actions)))
+	header := titleStyle.Render(clip(heading, max(1, width-lipgloss.Width(count)-2)))
 	header += strings.Repeat(" ", max(1, width-lipgloss.Width(header)-lipgloss.Width(count))) + count
-	search := dim.Render("/  Search commands, features and descriptions…")
+	search := dim.Render("/  Search workflows and commands…")
 	if m.search != "" {
 		search = accent.Render("/  ") + textStyle.Render(m.search)
 	}
 	if m.searching {
-		search = accent.Render("/  ") + m.inputView(width-4, false)
+		search = accent.Render("/  ") + m.inputView(width-7, false)
 	}
-	lines := []string{header, "", clip(search, width), ""}
+	search = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(line).Padding(0, 1).Width(width).Render(clip(search, width-4))
+	lines := []string{header, dim.Render(clip(description, width)), search, ""}
 	if len(actions) == 0 {
-		return strings.Join(append(lines, dim.Render("No matches. Try “archive”, “cron” or “login”.")), "\n")
+		return strings.Join(append(lines, dim.Render("No matches. Try archive, login, or schedule.")), "\n")
 	}
-	rowHeight := 3
-	if height < 23 {
-		rowHeight = 2
-	}
-	page := max(1, (height-6)/rowHeight)
-	start := max(0, m.selected-page+1)
+	rowHeight, page, start := m.actionListGeometry(height)
 	for i := start; i < min(len(actions), start+page); i++ {
 		action := actions[i]
 		name := "  " + action.Title
+		style := textStyle
 		if i == m.selected {
-			name = "▸ " + action.Title
+			name, style = "▸ "+action.Title, selectedStyle.Bold(true).Width(width)
 		}
-		if i == m.selected {
-			lines = append(lines, selectedStyle.Bold(true).Width(width).Render(clip(name, width)))
-		} else {
-			lines = append(lines, textStyle.Render(clip(name, width)))
-		}
+		lines = append(lines, style.Render(clip(name, width)), dim.Render(clip("  "+action.Description, width)))
 		if rowHeight == 3 {
-			lines = append(lines, dim.Render(clip("  "+action.Description, width)))
+			lines = append(lines, "")
 		}
-		lines = append(lines, "")
 	}
-	lines = append(lines, dim.Render(fmt.Sprintf("%02d / %02d", m.selected+1, len(actions)))+"  "+dim.Render("Enter to open · Review before making changes"))
+	lines = append(lines, dim.Render(fmt.Sprintf("%d / %d", m.selected+1, len(actions)))+"  "+accent.Render("Enter to continue"))
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) formView(width, height int) string {
-	fields := m.visibleFields()
-	top := accent.Render("01 CONFIGURE") + dim.Render("   ───   02 REVIEW   ───   03 RUN")
-	heading := titleStyle.Render(m.form.Action.Title)
-	mode := "Common options"
-	if m.advanced {
-		mode = "All options"
+func (m Model) actionListGeometry(height int) (rowHeight, page, start int) {
+	rowHeight = 2
+	if height >= 25 {
+		rowHeight = 3
 	}
-	if m.fieldSearch != "" {
-		mode = "Matching options"
-	}
-	unit := "fields"
-	if len(fields) == 1 {
-		unit = "field"
-	}
-	status := dim.Render(fmt.Sprintf("%s · %d %s · Ctrl+A to switch", mode, len(fields), unit))
-	if m.searching {
-		status = accent.Render("/ ") + m.inputView(width-3, false)
-	}
-	lines := []string{top, "", heading, clip(status, width), ""}
-	page := max(1, height-11)
-	start := max(0, m.focus-page+1)
-	labelWidth := min(25, width/2)
-	for n := start; n < min(len(fields), start+page); n++ {
-		field := m.form.Fields[fields[n]]
-		marker := "  "
-		if n == m.focus {
-			marker = "▸ "
-		}
-		label := field.Label
-		if field.Required {
-			label += " *"
-		}
-		label = lipgloss.NewStyle().Width(labelWidth).Render(clip(marker+label, labelWidth))
-		value := field.Display()
-		if m.editing && n == m.focus {
-			value = m.inputView(width-labelWidth-4, field.Secret)
-		}
-		change := " "
-		if field.Dirty {
-			change = "•"
-		}
-		row := label + " " + change + " " + clip(value, width-labelWidth-3)
-		if n == m.focus {
-			lines = append(lines, selectedStyle.Width(width).Render(row))
-		} else {
-			lines = append(lines, textStyle.Render(row))
-		}
-	}
-	if len(fields) == 0 {
-		lines = append(lines, dim.Render("No matching options. Esc clears the search."))
-	}
-	for len(lines) < height-5 {
-		lines = append(lines, "")
-	}
-	if len(fields) > 0 {
-		field := m.form.Fields[fields[m.focus]]
-		help := field.Help
-		if field.Type == "stringArray" || field.Type == "stringSlice" {
-			help += " Comma-separated values; quote a value containing a comma."
-		}
-		if len(field.Choices) > 0 {
-			help += " Choices: " + strings.Join(field.Choices, ", ") + "."
-		}
-		lines = append(lines, dim.Render(strings.Repeat("─", width)))
-		lines = append(lines, dim.Render(fit(ansi.Wrap(help, width, ""), width, 2)))
-		lines = append(lines, dim.Render(fmt.Sprintf("%d / %d", m.focus+1, len(fields)))+"  "+accent.Render("Ctrl+R  Review command"))
-	}
-	if m.err != "" {
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#FFAFB8")).Render(clip("! "+m.err, width)))
-	}
-	return strings.Join(lines, "\n")
+	page = max(1, (height-7)/rowHeight)
+	start = max(0, m.selected-page+1)
+	return
 }
 
 func (m Model) reviewView(width, height int) string {
@@ -224,13 +164,19 @@ func (m Model) reviewView(width, height int) string {
 		if field.Name == "arguments" && field.Value == "" {
 			continue
 		}
-		if !field.Dirty {
+		if !field.Dirty && field.Advanced {
 			continue
 		}
 		lines = append(lines, dim.Render(field.Label+"  ")+textStyle.Render(clip(field.Display(), max(1, width-len(field.Label)-2))))
 	}
 	if len(lines) == 4 {
 		lines = append(lines, dim.Render("Using the default settings for this workflow."))
+	}
+	if len(m.plan.Tasks) > 0 {
+		lines = append(lines, "", accent.Render(fmt.Sprintf("%d account backups · one at a time", len(m.plan.Tasks))))
+		for _, task := range m.plan.Tasks {
+			lines = append(lines, textStyle.Render(clip(safeText(task.Account)+" → "+safeText(task.Directory), width)))
+		}
 	}
 	if len(m.plan.Path) > 0 && m.plan.Path[0] == "login" {
 		lines = append(lines, "", warning.Render("This replaces the saved login in the selected namespace."))
@@ -246,23 +192,56 @@ func (m Model) reviewView(width, height int) string {
 }
 
 func (m Model) helpView(width, height int) string {
-	content := titleStyle.Render("A few keys. Every command.") + "\n\n" + accent.Render("WORKSPACE") + "\n↑/↓ or j/k   Choose a command\nTab / ←/→    Change section\n/            Search across every command\nEnter        Configure the selected command\n\n" + accent.Render("OPTIONS") + "\n↑/↓ or Tab   Move between fields\nEnter        Edit text or toggle a switch\nSpace / ←/→  Toggle a switch or cycle choices\nCtrl+A       Show or hide advanced options\n/            Find any option, including advanced ones\nCtrl+D       Reset a field to its inherited default\nCtrl+R       Validate and review the command\n\n" + accent.Render("EDITING") + "\nEnter saves · Esc cancels · Ctrl+U clears\nHome/End · ←/→ · Ctrl+W delete word\nTab completes a unique file or directory path\n\nRESULTS & TASKS\nTab / Shift+Tab   Focus action buttons\nEnter / click    Activate the focused button\n↑/↓ · /          Select or search results\nt / l / d        Results / Activity / Details\ni                Respond to an active prompt (Esc ends input)\nCtrl+C           Cancel active task; keep workspace open\n\nEsc goes back · Ctrl+C exits when idle · ? closes this guide"
+	content := titleStyle.Render("A few keys. Every command.") + "\n\n" + accent.Render("WORKSPACE") + "\n↑/↓ or j/k   Choose a command\nTab / ←/→    Change section\n/            Search across every command\nEnter        Configure the selected command\n\n" + accent.Render("OPTIONS") + "\n↑/↓ or Tab   Move between fields\nEnter        Edit text or toggle a switch\nSpace / ←/→  Toggle a switch or cycle choices\nCtrl+A       Show or hide advanced options\nCtrl+F       Find any option, including advanced ones\nCtrl+D       Reset a field to its inherited default\nCtrl+R       Validate and review the command\n\n" + accent.Render("CHOICE DROPDOWNS") + "\nEnter / click  Open the list beside the argument\n↑↓ / wheel     Scroll the list; Enter/Space toggles items\nType to filter; checked items persist while scrolling\n← saves and closes; Tab saves and moves on; Esc undoes\nCtrl+A / Ctrl+D Select all / clear\nCtrl+L         Refresh saved accounts\n\n" + accent.Render("FILES & FOLDERS") + "\nEnter / Browse Open the system file or folder chooser\nAlt+O          Browse while editing a path\nType path      Enter a destination manually\nEsc            Cancel the chooser and keep your input\n\n" + accent.Render("EDITING") + "\nType or paste to edit · Enter saves · Esc undoes\nHome/End · ←/→ · Ctrl+W delete word\nTab saves and moves on · Alt+/ completes a path\n\nRESULTS & TASKS\nTab / Shift+Tab   Focus action buttons\nEnter / click    Activate the focused button\n↑/↓ · /          Select or search results\nt / l / d        Results / Activity / Details\ni                Respond to an active prompt (Esc ends input)\nCtrl+C           Cancel active task; keep workspace open\n\nEsc goes back · Ctrl+C exits when idle · ? closes this guide"
 	return scrolled(content, width, height, m.scroll)
 }
 
 func (m Model) footer() string {
+	if m.calendar != nil {
+		return accent.Render("Enter choose · Esc cancel") + dim.Render("   Arrows day   PgUp/PgDn month   I type")
+	}
+	if m.pathDialog != nil {
+		if m.pathDialog.browser == nil {
+			return accent.Render("Choose in the system dialog") + dim.Render("   Esc cancel")
+		}
+		return accent.Render("Enter open · Space select") + dim.Render("   Tab actions   Type to filter   Ctrl+H hidden   Esc cancel")
+	}
+	if m.picker != nil {
+		if m.inlinePicker() {
+			if !m.picker.multi {
+				return accent.Render("Enter select · Tab next") + dim.Render("   ↑↓ / wheel scroll   Type to filter   Esc undo")
+			}
+			if m.picker.custom {
+				return accent.Render("Enter add/toggle · ← save") + dim.Render("   Add/Done buttons   Esc undo")
+			}
+			return accent.Render("Enter toggle · ← save") + dim.Render("   Click items/Done   ↑↓ scroll   Esc undo")
+		}
+		return accent.Render("Space select · Enter apply") + dim.Render("   Type to filter   ↓ list   Ctrl+A all   Esc cancel")
+	}
 	if m.help {
 		return dim.Render("↑↓ scroll   Esc / ? close guide")
 	}
 	if m.editing {
-		return accent.Render("Enter save") + dim.Render("   Esc cancel   Ctrl+U clear   Tab complete path")
+		if fields := m.visibleFields(); m.screen == configure && len(fields) > 0 && m.focus < len(fields) && m.form.Fields[fields[m.focus]].PathKind != "" {
+			return accent.Render("Enter save · Alt+O browse") + dim.Render("   Tab next   Esc undo   Ctrl+U clear")
+		}
+		return accent.Render("Enter save") + dim.Render("   Tab next   Esc undo   Ctrl+U clear   Alt+/ complete path")
 	}
 	if m.searching {
 		return accent.Render("Type to search") + dim.Render("   Enter finish   Esc clear")
 	}
 	switch m.screen {
 	case configure:
-		return accent.Render("Enter edit") + dim.Render("   ↑↓ move   Ctrl+A advanced   Ctrl+R review   F6 buttons   Esc back   ? help")
+		if fields := m.visibleFields(); len(fields) > 0 && m.focus < len(fields) && m.form.Fields[fields[m.focus]].PathKind != "" {
+			return accent.Render("Enter browse · Alt+O chooser") + dim.Render("   Type path   Tab next   Ctrl+R review   Esc back")
+		}
+		if fields := m.visibleFields(); len(fields) > 0 && m.focus < len(fields) && choiceField(m.form.Fields[fields[m.focus]]) {
+			if m.form.Fields[fields[m.focus]].Multi {
+				return accent.Render("Click to multi-select") + dim.Render("   Tab next   Ctrl+R review   Esc back")
+			}
+			return accent.Render("Enter select · Tab next") + dim.Render("   Click a choice   Ctrl+R review   Ctrl+F find option   Esc back")
+		}
+		return accent.Render("Type to edit") + dim.Render("   Tab next   Ctrl+R review   Ctrl+F find option   Esc back   ? help")
 	case review:
 		return accent.Render("Enter run") + dim.Render("   Esc edit   ↑↓ scroll   ? help")
 	case running:
@@ -278,18 +257,9 @@ func (m Model) footer() string {
 }
 
 func (m Model) inputView(width int, secret bool) string {
-	value := string(m.input)
-	if secret {
-		value = strings.Repeat("•", len(m.input))
-	}
-	runes := []rune(value)
-	start := max(0, m.cursor-max(1, width-3))
-	before := string(runes[start:m.cursor])
-	current, after := " ", ""
-	if m.cursor < len(runes) {
-		current, after = string(runes[m.cursor]), string(runes[m.cursor+1:])
-	}
-	return clip(before+lipgloss.NewStyle().Reverse(true).Render(current)+after, width)
+	editor := m.editor
+	editor.SetWidth(max(1, width-1))
+	return editor.View()
 }
 
 func clip(value string, width int) string { return ansi.Truncate(value, max(1, width), "…") }

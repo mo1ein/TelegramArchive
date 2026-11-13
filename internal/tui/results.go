@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -144,6 +145,12 @@ func (m *Model) openPath(path string, preset map[string]string) {
 	m.err = "This action is unavailable in this build."
 }
 func (m *Model) begin() tea.Cmd {
+	m.batchIndex, m.batchResults, m.batchStarted = 0, nil, time.Now()
+	return m.startTask()
+}
+
+func (m *Model) startTask() tea.Cmd {
+	m.selectedResults = nil
 	if len(m.plan.Path) > 0 {
 		switch m.plan.Path[0] {
 		case "login", "recover", "migrate":
@@ -151,6 +158,9 @@ func (m *Model) begin() tea.Cmd {
 		}
 	}
 	m.loading = false
+	m.pendingAction = ""
+	m.pendingSelection = ""
+	m.meter = newProgress()
 	m.cachedAt = time.Time{}
 	m.stage = ""
 	m.started = time.Now()
@@ -161,6 +171,8 @@ func (m *Model) begin() tea.Cmd {
 	m.last = finishedMsg{}
 	m.output = ""
 	m.progress = nil
+	m.status = nil
+	m.syncedOutput = false
 	m.data = resultData{}
 	if strings.Join(m.plan.Path, " ") == "chat ls" {
 		m.data.Kind = "chat ls"
@@ -177,7 +189,7 @@ func (m *Model) begin() tea.Cmd {
 	m.buttonFocus = 0
 	m.buttonsFocused = false
 	m.err = ""
-	return m.run(taskCtx, m.plan)
+	return m.run(taskCtx, m.taskPlan())
 }
 
 type resultSnapshot struct {
@@ -187,10 +199,11 @@ type resultSnapshot struct {
 	output, search string
 	selected, tab  int
 	last           finishedMsg
+	checked        map[string]bool
 }
 
 func (m *Model) saveList() {
-	m.source = &resultSnapshot{m.plan, m.form, m.data, m.output, m.resultSearch, m.resultSelected, m.resultTab, m.last}
+	m.source = &resultSnapshot{plan: m.plan, form: m.form, data: m.data, output: m.output, search: m.resultSearch, selected: m.resultSelected, tab: m.resultTab, last: m.last, checked: maps.Clone(m.selectedResults)}
 }
 func (m *Model) restoreList() {
 	if m.source == nil {
@@ -204,9 +217,35 @@ func (m *Model) restoreList() {
 	m.buttonsFocused = false
 	m.buttonFocus = 0
 	m.source = nil
+	m.selectedResults = maps.Clone(s.checked)
 	m.progress = nil
+	m.status = nil
+	m.syncedOutput = false
 	m.cancelling = false
 	m.responding = false
+}
+
+func (m Model) checkedResults() []item {
+	var rows []item
+	for _, row := range m.data.Items {
+		if m.selectedResults[row.ID] {
+			rows = append(rows, row)
+		}
+	}
+	return rows
+}
+
+func (m *Model) selectBrowserAccount() {
+	account := m.globals["ns"]
+	for _, arg := range m.plan.Args {
+		if strings.HasPrefix(arg, "--ns=") {
+			account = strings.TrimPrefix(arg, "--ns=")
+		}
+	}
+	m.accountSelection = []string{account}
+	if account != "" && !slices.Contains(m.accounts, account) {
+		m.accounts = append(m.accounts, account)
+	}
 }
 func (m Model) resultListGeometry(height int) (int, int) {
 	start := 7
@@ -223,12 +262,14 @@ type browseCache struct {
 
 func chatCacheKey(plan Plan) [32]byte { return sha256.Sum256([]byte(strings.Join(plan.Args, "\x00"))) }
 func (m *Model) saveChatCache() {
+	m.cacheChats(m.plan, m.data)
+}
+func (m *Model) cacheChats(plan Plan, data resultData) {
 	if m.chatCache == nil {
 		m.chatCache = map[[32]byte]browseCache{}
 	}
-	data := m.data
 	data.Items = slices.Clone(data.Items)
-	key := chatCacheKey(m.plan)
+	key := chatCacheKey(plan)
 	if _, exists := m.chatCache[key]; !exists && len(m.chatCache) >= 8 {
 		var oldest [32]byte
 		var savedAt time.Time
@@ -262,6 +303,8 @@ func (m *Model) showChatCache() bool {
 	m.scroll = 0
 	m.stage = ""
 	m.progress = nil
+	m.status = nil
+	m.syncedOutput = false
 	m.err = ""
 	m.cancelling = false
 	m.responding = false

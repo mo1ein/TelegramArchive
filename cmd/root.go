@@ -31,6 +31,7 @@ func New() *cobra.Command {
 	}
 	root.PersistentFlags().Lookup("ns").Usage = "saved Telegram login; concurrent terminals need separate namespaces (the same account is supported); list with ta accounts"
 	root.AddCommand(NewArchive(), NewStats(), NewRender(), NewSchedule(), NewAccount(), NewSync(), NewCron(), NewAccounts(), NewVersion(), newSessionRecover(), NewTUI())
+	annotateTUIChoices(root)
 	viper.SetEnvPrefix("TA")
 	bindProductEnvironment(root)
 	brandCommands(root)
