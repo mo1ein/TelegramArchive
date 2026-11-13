@@ -2,8 +2,11 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/mo1ein/TelegramArchive/internal/archive"
 	"testing"
+	"time"
 
 	"github.com/gotd/td/bin"
 	tgclient "github.com/gotd/td/telegram"
@@ -55,5 +58,45 @@ func TestJoinedChannelsIncludeArchiveAndContinuePagination(t *testing.T) {
 	}
 	if _, ok := seen["1/0"]; !ok {
 		t.Fatal("archive folder not queried")
+	}
+}
+
+func TestStreamDialogsEmitsBeforeNextPageAndDoesNotFetchTopics(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pages := make(chan int, 1)
+	api := tg.NewClient(tgclient.InvokeFunc(func(ctx context.Context, input bin.Encoder, output bin.Decoder) error {
+		req, ok := input.(*tg.MessagesGetDialogsRequest)
+		if !ok {
+			return fmt.Errorf("unexpected eager per-chat request %T", input)
+		}
+		if req.OffsetID != 0 {
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		output.(*tg.MessagesDialogsBox).Dialogs = &tg.MessagesDialogsSlice{Count: 2, Dialogs: []tg.DialogClass{&tg.Dialog{Peer: &tg.PeerChannel{ChannelID: 42}, TopMessage: 10}}, Chats: []tg.ChatClass{&tg.Channel{ID: 42, AccessHash: 42, Title: "Synthetic forum", Megagroup: true, Forum: true}}, Messages: []tg.MessageClass{&tg.Message{ID: 10, Date: 100, PeerID: &tg.PeerChannel{ChannelID: 42}}}}
+		return nil
+	}))
+	source := &Source{api: api, manager: peers.Options{}.Build(api), chats: map[string]tg.InputPeerClass{}}
+	done := make(chan error, 1)
+	go func() {
+		done <- source.StreamDialogs(ctx, []string{"groups"}, func(chats []archive.Chat) error { pages <- len(chats); return nil })
+	}()
+	select {
+	case count := <-pages:
+		if count != 1 {
+			t.Fatal("wrong first page size")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("chat page hidden behind remaining requests")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancellation lost: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("stream did not stop")
 	}
 }

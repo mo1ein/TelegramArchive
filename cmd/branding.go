@@ -19,6 +19,7 @@ import (
 )
 
 func configureProductPaths() {
+	configureNativeApp()
 	upstreamconsts.DataDir = consts.DataDir
 	upstreamconsts.LogPath = consts.LogPath
 	upstreamconsts.ExtensionsPath = filepath.Join(consts.DataDir, "extensions")

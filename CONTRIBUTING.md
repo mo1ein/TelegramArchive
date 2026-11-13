@@ -1,6 +1,6 @@
 # Contributing
 
-ta is a Go CLI. Building requires Go 1.25.8 or newer.
+ta is a Go CLI with a Bubble Tea v2 workspace. Building requires Go 1.26 or newer.
 
 Create a short-lived branch from `main` and keep each commit focused on one
 change. Describe the problem, resulting behavior and verification in your pull

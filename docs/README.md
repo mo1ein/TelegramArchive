@@ -2,7 +2,7 @@
 
 [Project README](../README.md)
 
-Install ta with Go 1.25.8 or newer:
+Install ta with Go 1.26 or newer:
 
 ```sh
 go install github.com/mo1ein/TelegramArchive/cmd/ta@latest
@@ -16,9 +16,11 @@ See [installation and PATH setup](../README.md#installation), or run
 
 | Guide | Covers |
 | --- | --- |
+| [Interactive workspace](tui.md) | Native result lists, account/chat browsers, action buttons, live progress and keyboard shortcuts |
 | [Archiving](archiving.md) | Chat selection, media filters, resume, refresh, progress, JSON/HTML, rendering and statistics |
 | [Backups](backups.md) | Account data, Saved Messages, incremental sync, cron jobs and scheduling |
 | [Accounts and settings](configuration.md) | Login modes, namespaces, concurrent terminals and development checks |
+| [macOS login setup](macos.md) | Native website client, Full Disk Access, data paths, local passcodes and import troubleshooting |
 | [Global options](global-options.md) | Proxy, storage, concurrency, connection settings and environment variables |
 | [Desktop coverage](desktop-compatibility.md) | Supported formats, fields and API limits |
 

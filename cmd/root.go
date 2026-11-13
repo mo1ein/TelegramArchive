@@ -17,6 +17,9 @@ func New() *cobra.Command {
 	root.Use = "ta"
 	root.Short = "Back up Telegram chats and account data as JSON or offline HTML"
 	root.Version = version()
+	root.Args = cobra.NoArgs
+	root.RunE = runDefault
+	root.Annotations = map[string]string{"offline": "true"}
 	root.PersistentFlags().String(flagResultFile, "", "private completion report for a parent backup process")
 	root.PersistentFlags().MarkHidden(flagResultFile)
 	root.PersistentFlags().Duration(flagDownloadTimeout, transport.DefaultDownloadTimeout, "inactivity limit for archive history reads and media transfers; 0 disables")
@@ -27,17 +30,18 @@ func New() *cobra.Command {
 		}
 	}
 	root.PersistentFlags().Lookup("ns").Usage = "saved Telegram login; concurrent terminals need separate namespaces (the same account is supported); list with ta accounts"
-	root.AddCommand(NewArchive(), NewStats(), NewRender(), NewSchedule(), NewAccount(), NewSync(), NewCron(), NewAccounts(), NewVersion(), newSessionRecover())
+	root.AddCommand(NewArchive(), NewStats(), NewRender(), NewSchedule(), NewAccount(), NewSync(), NewCron(), NewAccounts(), NewVersion(), newSessionRecover(), NewTUI())
 	viper.SetEnvPrefix("TA")
 	bindProductEnvironment(root)
 	brandCommands(root)
 	wrapLoginIdentity(root)
+	wrapTUIChatBrowser(root)
 	pre, post := root.PersistentPreRunE, root.PersistentPostRunE
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if viper.GetDuration(flagDownloadTimeout) < 0 {
 			return fmt.Errorf("download-timeout cannot be negative")
 		}
-		if cmd.Name() == "stats" || cmd.Annotations["offline"] == "true" {
+		if offlineCommand(cmd) {
 			return nil
 		}
 		if err := prepareProductStorage(cmd); err != nil {
@@ -56,7 +60,7 @@ func New() *cobra.Command {
 		return nil
 	}
 	root.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
-		if cmd.Name() == "stats" || cmd.Annotations["offline"] == "true" {
+		if offlineCommand(cmd) {
 			return nil
 		}
 		return post(cmd, args)

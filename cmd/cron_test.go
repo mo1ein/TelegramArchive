@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"path/filepath"
@@ -195,5 +196,31 @@ func TestCronInitialFailureKeepsInstalledSchedule(t *testing.T) {
 	jobs, err := manager.List(context.Background())
 	if err != nil || len(jobs) != 1 || !jobs[0].Installed {
 		t.Fatal("initial failure removed retries", jobs, err)
+	}
+}
+
+func TestCronJSONListDoesNotExposeExecutionCredentials(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+	dir := t.TempDir()
+	table := &testCronTable{}
+	manager := managedcron.Manager{Directory: filepath.Join(dir, "jobs"), Table: table}
+	job := managedcron.Job{Name: "synthetic", Schedule: "0 */6 * * *", Executable: "/usr/bin/true", Directory: dir, Arguments: []string{"sync", "--proxy=socks5://private-password@invalid"}, Environment: map[string]string{"TA_PROXY": "private-password"}, Log: filepath.Join(dir, "synthetic.log")}
+	if err := manager.Install(context.Background(), job); err != nil {
+		t.Fatal(err)
+	}
+	root := cronRoot(manager, nil)
+	root.SetArgs([]string{"cron", "list", "--json"})
+	var output bytes.Buffer
+	root.SetOut(&output)
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(output.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0]["name"] != "synthetic" || strings.Contains(output.String(), "private-password") || rows[0]["environment"] != nil || rows[0]["arguments"] != nil {
+		t.Fatal("unsafe schedule summary")
 	}
 }

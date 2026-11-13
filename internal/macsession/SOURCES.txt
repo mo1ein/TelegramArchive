@@ -1,0 +1,28 @@
+Native session format references (the Go reader is an independent implementation):
+
+Telegram's native client:
+https://github.com/TelegramMessenger/telegram-macos
+
+Postbox account metadata, coding and authorization state:
+https://github.com/TelegramMessenger/Telegram-iOS/blob/master/submodules/TelegramCore/Sources/AccountManager/AccountManagerAtomicState.swift
+https://github.com/TelegramMessenger/Telegram-iOS/blob/master/submodules/TelegramCore/Sources/AccountManager/AccountRecord.swift
+https://github.com/TelegramMessenger/Telegram-iOS/blob/master/submodules/TelegramCore/Sources/Account/AccountManager.swift
+https://github.com/TelegramMessenger/Telegram-iOS/blob/master/submodules/TelegramCore/Sources/SyncCore/SyncCore_AuthorizedAccountState.swift
+https://github.com/TelegramMessenger/Telegram-iOS/blob/master/submodules/Postbox/Sources/Coding.swift
+https://github.com/TelegramMessenger/Telegram-iOS/blob/master/submodules/Postbox/Sources/MetadataTable.swift
+https://github.com/TelegramMessenger/Telegram-iOS/blob/master/submodules/Postbox/Sources/Postbox.swift
+https://github.com/TelegramMessenger/Telegram-iOS/blob/master/submodules/Postbox/Sources/SqliteValueBox.swift
+https://github.com/TelegramMessenger/Telegram-iOS/blob/master/submodules/MtProtoKit/Sources/MTDatacenterAuthInfo.m
+
+SQLCipher page authentication and SQLite committed-WAL format:
+https://github.com/sqlcipher/sqlcipher/blob/master/src/sqlcipher.c
+https://sqlite.org/fileformat.html
+
+Local passcode wrapper documentation and public native application profiles:
+https://github.com/kolezka/tg-viewer/blob/main/apps/tool/tg_appstore_decrypt.py
+https://github.com/thedemons/opentele/blob/main/src/api.py
+
+No real session material is included in this package or its fixtures. Fixture
+keys are deliberately synthetic (byte sequences), generated using independent
+Python standard-library and OpenSSL implementations; Python and OpenSSL are not
+required to run the importer or tests.
