@@ -4,6 +4,22 @@
 
 ### Changed
 
+- Load chat names directly in the backup chat selector, with streamed results,
+  account-scoped caching, stop/reload controls, and manual chat entry.
+- Show Since and Until date/time filters in the main backup forms.
+- Label TUI export formats as JSON, HTML, and Both to match the CLI options.
+- Simplify TUI forms with task-specific settings, wide text editors, direct
+  typing and paste, Tab navigation, visible choice controls and inline errors.
+- Place editable values and compact, scrollable selectors beside their argument
+  labels, with independent wheel scrolling and preserved multi-selections.
+- Keep selected multi-select names visible, distinguish checkboxes from single
+  choices, and provide a selected-only view and Add-item editor for custom lists.
+- Support the full multi-select flow with mouse clicks, keep scrolled checkboxes
+  in place, avoid skipping options in small lists, and add a clickable Add action.
+- Use Enter to toggle highlighted multi-select items and Left Arrow to accept
+  the choices and close the list, including chat category selection.
+- Render backup measurements with animated Bubbles progress bars and skip
+  reprocessing unchanged task output while waiting for worker updates.
 - Require Go 1.26 or newer for the Bubble Tea v2 terminal interface.
 - Open the interactive workspace when `ta` runs without arguments in a terminal;
   piped invocations and `ta --help` continue to display command help.
@@ -13,6 +29,15 @@
 
 ### Added
 
+- Calendar pickers for Since and Until, with mouse selection, month navigation,
+  Today and Clear controls, and manual timestamp entry.
+- File and folder choosers for TUI path fields, with native macOS Open/Save
+  dialogs, multiple-file selection, and a terminal browser for remote sessions
+  and systems without a graphical chooser. Manual path entry stays available.
+- Searchable TUI dropdowns and inline multi-select lists for saved accounts, media, chat
+  categories and account sections. Check multiple chats or accounts in browser
+  results. Multi-account backups run as a queue with isolated output folders,
+  per-account progress and retained results, including failures and cancellation.
 - `ta tui`: a responsive Bubble Tea workspace covering public commands and their
   options, including installed extensions. Includes quick-start presets,
   command and option search, common/advanced forms, inline validation, command

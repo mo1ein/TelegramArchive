@@ -199,7 +199,7 @@ func TestModelSearchEditReviewAndReturn(t *testing.T) {
 		t.Fatal("opened command ran unexpectedly")
 	}
 	m.focus = slices.Index(m.visibleFields(), slices.IndexFunc(m.form.Fields, func(f Field) bool { return f.Name == "output" }))
-	m = update(m, key(tea.KeyEnter, ""))
+	m = clickChoiceText(t, m, "[ Type path ]")
 	m = update(m, key('u', "", tea.ModCtrl))
 	m = update(m, tea.PasteMsg{Content: "آرشیو/Book Club"})
 	m = update(m, key(tea.KeyEnter, ""))
@@ -241,7 +241,7 @@ func TestSearchNoMatchesAndAdvancedOptions(t *testing.T) {
 		t.Fatal(m.screen)
 	}
 	m.open(action)
-	m = update(m, key('/', "/"))
+	m = update(m, key('f', "", tea.ModCtrl))
 	m = update(m, tea.PasteMsg{Content: "proxy"})
 	if fields := m.visibleFields(); len(fields) != 1 || m.form.Fields[fields[0]].Name != "proxy" {
 		t.Fatal(fields)
@@ -260,6 +260,7 @@ func TestSpaceTogglesSwitchesAndCyclesChoices(t *testing.T) {
 	root, action := fixture()
 	m := New(Catalog(root), nil, "default", context.Background())
 	m.open(action)
+	m.advanced = true // Resume is an advanced setting; its control still works.
 	focus := func(name string) {
 		m.focus = slices.Index(m.visibleFields(), slices.IndexFunc(m.form.Fields, func(f Field) bool { return f.Name == name }))
 	}
@@ -278,7 +279,7 @@ func TestSpaceTogglesSwitchesAndCyclesChoices(t *testing.T) {
 		t.Fatal("field did not reset")
 	}
 	focus("output")
-	m = update(m, key(tea.KeyEnter, ""))
+	m = clickChoiceText(t, m, "[ Type path ]")
 	m = update(m, key(' ', " "))
 	if string(m.input) != "data " {
 		t.Fatal("space should type normally in an editor")

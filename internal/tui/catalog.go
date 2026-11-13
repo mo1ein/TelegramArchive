@@ -47,9 +47,10 @@ func Catalog(root *cobra.Command) []Action {
 		{"accounts", "Your Telegram accounts", "Select a saved account for your next backup.", nil},
 		{"cron list", "Scheduled backups", "Review schedules, run a backup, or inspect its logs.", nil},
 		{"login", "Connect a Telegram account", "Sign in with a QR code to get started.", map[string]string{"type": "qr"}},
-		{"archive", "Archive a chat", "Save a chat with media, JSON and an offline HTML reader.", map[string]string{"chat": "me", "media": "all", "format": "both"}},
+		{"archive", "Back up Saved Messages", "Save your personal notes, files and media as JSON and HTML.", map[string]string{"chat": "me", "media": "all", "format": "both"}},
 		{"archive", "Back up all channels", "Archive your joined channels, including private channels.", map[string]string{"all": "true", "types": "channels", "media": "all", "format": "both"}},
-		{"sync", "Back up everything", "Incrementally sync chats, account data and Saved Messages.", map[string]string{"everything": "true", "format": "both"}},
+		{"sync", "Back up everything", "Incrementally sync chats, account data and Saved Messages.", map[string]string{"everything": "true", "media": "all", "format": "both"}},
+		{"sync", "Back up multiple accounts", "Choose saved accounts and create a separate backup for each.", map[string]string{"everything": "true", "media": "all", "format": "both"}},
 		{"account", "Save account data", "Choose account sections and back up Saved Messages.", map[string]string{"format": "both"}},
 		{"cron add", "Schedule a backup", "Install a recurring backup every six hours.", map[string]string{"everything": "true", "every": "6h", "format": "both"}},
 	} {
@@ -86,6 +87,11 @@ type Field struct {
 	Choices                                 []string
 	Required, Advanced, Global, Dirty       bool
 	Secret                                  bool
+	Multi                                   bool
+	ChoiceLabels                            map[string]string
+	PathKind                                string
+	PathMultiple                            bool
+	AllowCustom                             bool
 }
 
 type Form struct {
@@ -118,21 +124,27 @@ func NewForm(action Action, globals map[string]string) Form {
 		}
 		_, required := flag.Annotations[cobra.BashCompOneRequiredFlag]
 		global := cmd.Root().PersistentFlags().Lookup(flag.Name) == flag
-		field := Field{Name: flag.Name, Label: strings.ReplaceAll(flag.Name, "-", " "), Help: flag.Usage, Type: flag.Value.Type(), Value: value, Default: value, Required: required, Global: global, Advanced: !slices.Contains(common, flag.Name), Secret: flag.Name == "proxy" || strings.Contains(flag.Name, "password") || strings.Contains(flag.Name, "passcode") || strings.Contains(flag.Name, "token")}
+		field := Field{Name: flag.Name, Label: fieldLabel(flag.Name), Help: flag.Usage, Type: flag.Value.Type(), Value: value, Default: value, Required: required, Global: global, Advanced: !essential(action.Path, flag.Name), Secret: flag.Name == "proxy" || strings.Contains(flag.Name, "password") || strings.Contains(flag.Name, "passcode") || strings.Contains(flag.Name, "token")}
 		if flag.Name == "ns" {
-			field.Label = "account namespace"
+			field.Label = "Saved account"
 		}
 		if flag.Name == "type" && strings.Join(action.Path, " ") == "login" {
-			field.Label = "login method"
+			field.Label = "Sign-in method"
 		}
 		field.Choices = choices(action.Path, flag.Name, flag.Usage)
+		if values := flag.Annotations["ta:choices"]; len(values) > 0 {
+			field.Choices = slices.Clone(values)
+		}
+		field.Multi = flag.Value.Type() == "stringSlice" || flag.Value.Type() == "stringArray"
+		field.PathKind = flagPathKind(action.Path, flag)
+		field.PathMultiple = field.Multi && field.PathKind != ""
 		if value, ok := globals[flag.Name]; ok && global {
 			field.Value, field.Dirty = value, true
 		}
 		if value, ok := action.Preset[flag.Name]; ok {
 			field.Value, field.Dirty = value, true
 		}
-		field.Advanced = field.Advanced && !required && !field.Dirty
+		field.Advanced = field.Advanced && !required && (!field.Dirty || field.Global)
 		form.Fields = append(form.Fields, field)
 	})
 	// Some inherited commands accept arguments without declaring them in Use.
@@ -159,6 +171,13 @@ func NewForm(action Action, globals map[string]string) Form {
 	required := cmd.ValidateArgs(nil) != nil
 	noArgs := !required && cmd.ValidateArgs([]string{"example"}) != nil
 	form.Fields = append(form.Fields, Field{Name: "arguments", Label: argumentLabel, Help: argumentHelp, Type: "arguments", Required: required, Advanced: noArgs})
+	argument := &form.Fields[len(form.Fields)-1]
+	switch strings.Join(action.Path, " ") {
+	case "render":
+		argument.PathKind = "directory"
+	case "stats":
+		argument.PathKind, argument.PathMultiple = "open", true
+	}
 	slices.SortStableFunc(form.Fields, func(a, b Field) int {
 		rank := func(f Field) int {
 			if f.Required {
@@ -226,7 +245,29 @@ func (f Field) Display() string {
 		}
 		return "○ off"
 	}
+	if choiceField(f) {
+		if !f.Multi {
+			return f.optionLabel(f.Value)
+		}
+		values, err := readCSV(f.Value)
+		if err == nil {
+			for i := range values {
+				values[i] = f.optionLabel(values[i])
+			}
+			return strings.Join(values, ", ")
+		}
+	}
 	return f.Value
+}
+
+func (f Field) optionLabel(value string) string {
+	if label, ok := f.ChoiceLabels[value]; ok {
+		return safeText(label)
+	}
+	if customChoices(f) {
+		return safeText(value)
+	}
+	return choiceLabel(f.Name, value)
 }
 
 func (f Form) field(name string) *Field {
@@ -238,4 +279,6 @@ func (f Form) field(name string) *Field {
 	return nil
 }
 
-func (f Field) Error(err error) error { return fmt.Errorf("%s: %w", f.Label, err) }
+func (f Field) Error(err error) error {
+	return fmt.Errorf("%s: %w", strings.ToLower(f.Label), err)
+}

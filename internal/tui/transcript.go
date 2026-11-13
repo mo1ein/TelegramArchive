@@ -19,6 +19,7 @@ type transcript struct {
 	x, y, savedX, savedY int
 	width, height        int
 	progress             []string
+	status               *taskui.Progress
 	respond              func(string)
 }
 
@@ -35,6 +36,15 @@ func newTranscript(width, height int) *transcript {
 					lines[i] = safeText(lines[i])
 				}
 				t.progress = lines
+				return
+			}
+			var status taskui.Progress
+			if json.Unmarshal([]byte(payload[len(taskui.ProgressPrefix):]), &status) == nil && status.Label != "" {
+				status.Label = safeText(status.Label)
+				status.Detail = safeText(status.Detail)
+				status.Summary = safeText(status.Summary)
+				status.Percent = max(0, min(1, status.Percent))
+				t.status = &status
 			}
 		}
 	}, Print: t.print, Execute: t.control, HandleCsi: t.csi, HandleEsc: func(cmd ansi.Cmd) {
