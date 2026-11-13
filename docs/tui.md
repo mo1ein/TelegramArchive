@@ -13,11 +13,14 @@ ta --ns work tui           # start with a saved account namespace
 ta --proxy socks5://localhost:1080 tui
 ```
 
-From a local checkout, build with `make build` and run `./bin/ta`. Opening the
-workspace does not connect to Telegram or lock a saved session. Selecting an
-account or chat browser starts its read operation; backups and other changes go
-through configuration and review. Ordinary CLI commands remain available, and
-`ta` displays help when its input or output is redirected.
+From a local checkout, build with `make build` and run `./bin/ta`. Use
+`make install` to update the `ta` executable on your PATH as well; building
+`bin/ta` alone leaves an older installed copy in place. Reopen the workspace
+after updating. Opening the workspace does not connect to Telegram or lock a
+saved session. Opening a browser or the **Chats to back up** selector starts
+its read operation; backups and other changes go through configuration and
+review. Ordinary CLI commands remain available, and `ta` displays help when its
+input or output is redirected.
 
 ## Browse and act
 
@@ -32,10 +35,11 @@ Start with the dashboard's buttons or the first three Quick start workflows:
 The chat browser shows each page as it arrives, including archived chats. It
 reports connection and loading stages instead of waiting for every chat and
 forum topic. Connection setup is limited to 30 seconds, page requests to 20
-seconds, and a browse to 90 seconds. If loading is slow, **Stop loading** keeps
-received chats and enables their action buttons. Errors with no results open
-Activity so the reason is visible. The browser uses the same proxy settings and
-fallback environment variables as archive operations.
+seconds, and a browse to 90 seconds. You can select a received chat and choose
+**Archive** or **Export** immediately; the browser stops its lookup before
+opening that chat's settings. **Stop loading** also keeps received chats.
+Errors with no results open Activity so the reason is visible. The browser uses
+the same proxy settings and fallback environment variables as archive operations.
 
 Lists support ↑/↓, mouse selection, wheel scrolling and `/` search. Enter or the
 Details button opens the selected item's details. The **Results**, **Activity**
@@ -68,27 +72,104 @@ catalogue. Tab or ←/→ changes dashboard sections; `/` searches every section
 Installed extensions appear when the workspace starts; reopen it after changing
 the installed extensions.
 
-Quick start also includes QR login, a single-chat archive, all joined channels,
+Quick start also includes QR login, Saved Messages, all joined channels,
 a complete incremental backup, account data and recurring backups. Presets fill
 in options for you to review and change.
 
 ## Configure and review
 
-In a form, select a field and press Enter to edit it. Boolean switches toggle
-immediately. Space or ←/→ cycles fixed choices, such as an output format or
-login method. A dot marks explicitly set options; an asterisk marks required
-fields. Ctrl+D restores the default.
+Choice fields use compact dropdowns attached to their argument's value column.
+Click a field to open its list, click each checkbox to select several items,
+then click **Done** or **Review** to save. This entire flow works with the mouse.
+For the keyboard, Enter opens the list, ↑/↓ moves through items, each Enter
+checks or unchecks the highlighted item, and ← saves and closes the list.
+The list shows up to four options
+with a scrollbar and position indicator; use ↑/↓, PageUp/PageDown, Home/End or
+the mouse wheel over the list to scroll. Other arguments stay in the form.
+Multi-select items use **[✓]** checkboxes and a distinct color; clicking the
+label or checkbox toggles a choice, as do Enter and Space. Clicked items stay in place
+under the pointer. Selected names stay visible in the field and in its **Selected:** line.
+Ctrl+S shows only your checked items; press it again to show every option.
+Tab saves and moves to the next setting; Shift+Tab moves back. ← or **Done**
+saves without moving; Esc undoes the current selection. Ctrl+R saves and opens
+Review. The other settings and page actions stay visible while choosing.
 
-Common options appear first. Ctrl+A shows every public option, including proxy,
-storage, concurrency, filters and connection settings. `/` searches all options,
-including advanced ones. Descriptions appear below the selected field.
+Type or paste to filter the list; ↓ returns from the search box to the choices.
+Filtering and scrolling keep items checked outside the current view. **All**,
+**Clear** and **Done** sit beside the field; Ctrl+A and Ctrl+D select all or clear
+while choosing. Scrolling outside the list saves it and moves through arguments.
+Small terminals reduce the dropdown height to keep page actions visible.
+Media offers **All media**, **No media**, or individual categories.
+Single-choice fields use a dropdown and apply the highlighted option with Enter.
+Export format offers **JSON**, **HTML**, and **Both**; Both exports JSON and HTML.
 
-List options use commas, for example `photos,videos` or `pdf,zip`. Quote a list
-item containing a comma: `"Friends, family",telegram`. For positional arguments,
+**Chats to back up** loads the selected account's chat names directly when you
+open the field. You can search and check chats as pages arrive, including
+archived chats and Saved Messages. Choices save chat IDs while showing names.
+**Stop loading** keeps received chats available; **Reload chats** or Ctrl+L
+retries the lookup. Completed lists are reused for the same account and
+connection settings. Changing accounts clears account-specific chat choices.
+Choose one account to browse its chats; for several accounts, use all chats or
+add chat names manually.
+
+**Since (date/time)** and **Until (date/time)** appear in the main backup forms.
+Leave them empty for no limit. Since is inclusive and Until is exclusive.
+Enter or **Calendar** opens a calendar beside the field; shorter terminals show
+a compact calendar view. Click a day to select it, or use the arrow keys and
+Enter. PageUp/PageDown, the month arrows, or the wheel over the calendar change
+months. **Today** highlights today; **Clear** removes the date limit. Esc cancels
+without changing the saved value. Tab saves the highlighted day and moves on.
+**Type date/time** keeps manual entry available: use `2026-11-01` for a date,
+`2026-11-01T18:30:00+03:30` for a time with a time zone, or Unix seconds.
+Calendar dates use midnight UTC, matching the CLI's date format.
+
+Lists with custom values, including extensions, MIME filters, chat names and
+source links, use an Add-item multi-select. Type or paste one item and click
+**Add** to add and check it, then repeat for more items. Enter also adds items.
+Use **Done**, Tab or
+Ctrl+R to save; pending text is included. Commas inside an added item remain
+part of that item. **Clear** removes an optional list's values. Sensitive lists
+keep a masked text editor.
+
+Path fields have **Browse…** and **Type path** controls. Press Enter or click
+**Browse…** to choose a file or folder. On macOS this opens the system dialog;
+backup destinations use a folder chooser, input files use an Open dialog, and
+output files use a Save dialog. Fields that accept several files allow multiple
+selections. The chooser starts near the current path, including unfinished
+text edits. Cancel keeps the existing value and any text you were editing.
+Alt+O also opens Browse while typing.
+
+Remote sessions and systems without a graphical chooser use a terminal browser.
+Enter or click opens a folder; Space selects an item. Use **Use this folder**
+for the current folder or **Use selected** for checked files. Type to filter,
+use ← to go up, and Ctrl+H to show hidden items. The Save browser offers F2 to
+edit the filename, then **Save here** to select its destination. Choosing a
+save path prepares the command for Review; it does not write the output file.
+
+Each workflow starts with its essential settings. Labels and editable values
+share a compact argument table, with the selected field's description below it.
+Start typing or paste to edit a text field directly in its value column.
+Tab saves and moves to the next setting; Shift+Tab moves back. Invalid values
+keep the editor open with an explanation. Enter saves; Esc undoes the current
+edit. Ctrl+R also saves an active edit before opening the review.
+
+Boolean switches and fixed choices use visible selectors. Space, Enter or ←/→
+changes them. Choosing all chats clears an earlier specific-chat selection,
+and choosing a specific chat switches back to that scope. An asterisk marks
+required settings. Ctrl+D restores a setting's default.
+
+Ctrl+A or **More options** shows every public option, including account,
+proxy, storage, concurrency, filters and connection settings. Ctrl+F searches
+all options, including advanced ones. Connection details that do not apply to
+the selected login method stay out of the essential form.
+
+On the command line, list options use commas, for example `photos,videos` or
+`pdf,zip`. Quote a list item containing a comma: `"Friends, family",telegram`.
+For positional arguments,
 separate values with spaces and quote paths containing spaces:
 `"exports/Book Club/result.json" "exports/Work/result.json"`.
 
-While editing a path, Tab completes a unique matching file or directory name.
+While editing a path, Alt+/ completes a unique matching file or directory name.
 `~/` can be expanded this way. Paths are passed as typed; shell variables,
 wildcards, command substitution and pipes are not evaluated.
 
@@ -104,8 +185,32 @@ saved as a new configuration file.
 
 ## Tasks, prompts and cancellation
 
-Tasks run inside the workspace. Archive progress shows the current file or
-history scan, completion, speed and ETA when available. Activity output updates
+### Back up several accounts or chats
+
+Choose **Back up multiple accounts**, then open **Accounts to back up** and
+check the saved accounts you want. Account names are discovered locally without
+connecting to Telegram. Ctrl+L while choosing accounts refreshes the saved list.
+You can also check rows with Space in **Your Telegram accounts** and choose
+**Back up selected**. Busy accounts cannot be checked in the account browser.
+
+Review shows each account and its destination. Multi-account backups run once,
+one account at a time, with the same backup settings. Each gets a separate
+folder under `<output>/accounts/`, so archives from different accounts do not
+mix. A single-account backup keeps its usual output folder. The running screen
+identifies the current account, and results retain a completed, failed, cancelled
+or not-run status for every selected account. One failure does not prevent the
+remaining accounts from running. Cancelling stops the active backup and the
+remaining queue. Use separate scheduled backups for recurring account backups.
+
+In **Browse your chats**, check several rows with Space and choose **Archive
+selected**. The resulting form also offers the loaded chat names as a checkbox
+list. These chats stay tied to the account used to browse them. Returning to the
+browser restores its checks, search and selection.
+
+Tasks run inside the workspace. Backups use an animated Bubbles progress bar
+with the actual percentage, completed file count, transferred size, speed and
+ETA when available. History scans show a spinner and discovered work until a
+total is known. They do not show a guessed percentage. Activity output updates
 without taking over the terminal. When a task finishes, its result stays visible;
 there is no extra Enter-to-return prompt.
 
@@ -158,14 +263,36 @@ edit the proxy for the current workspace session.
 | Buttons | Tab/Shift+Tab, ←/→ | Select an action |
 | Buttons | Enter | Activate |
 | Options | ↑/↓, Tab/Shift+Tab | Select a field |
-| Options | Enter | Edit text or toggle a switch |
+| Options | Type, paste, or Enter | Edit text or change a selection |
 | Options | Space or ←/→ | Toggle or cycle choices |
 | Options | Ctrl+A / Ctrl+D | All options / reset field |
 | Options | Ctrl+R | Validate and review |
+| Choice dropdown | ↑/↓ or mouse wheel over list | Scroll options within the field |
+| Multi-select dropdown | Enter / Space | Toggle the highlighted item; keep choosing |
+| Choice dropdown | Tab / Shift+Tab | Save and move to the next / previous setting |
+| Multi-select dropdown | ← | Save choices and return to the form |
+| Single-choice dropdown | Enter | Apply the highlighted option |
+| Choice dropdown | Esc | Undo the current selection |
+| Choice dropdown | Ctrl+A / Ctrl+D | Select all / clear multi-selections |
+| Choice dropdown | Ctrl+S | Show selected items / all options |
+| Custom list | Type or paste, then Enter | Add and check one literal item |
+| Account dropdown | Ctrl+L | Refresh saved accounts |
+| Chat dropdown | Ctrl+L / Reload chats | Reload the selected account's chats |
+| Dates | Enter / Calendar | Open the date picker |
+| Calendar | Arrow keys / Enter | Move between days / choose a day |
+| Calendar | PageUp / PageDown | Previous / next month |
+| Calendar | Ctrl+PageUp / Ctrl+PageDown | Previous / next year |
+| Calendar | T / Delete / I | Highlight today / clear the limit / type a timestamp |
+| Calendar | Esc | Cancel without changing the date |
+| Paths | Enter / Alt+O / Browse… | Open the file or folder chooser |
+| Path browser | Enter / Space | Open a folder / select an item |
+| Path browser | Ctrl+Enter / Esc | Confirm / cancel the selection |
+| Path browser | Ctrl+H / F2 | Show hidden items / edit a save filename |
 | Editing | Enter / Esc | Save / cancel an edit |
 | Editing | Ctrl+U / Ctrl+K / Ctrl+W | Clear / delete to end / delete a word |
 | Editing | Home/End, ←/→ | Move cursor |
-| Editing | Tab | Complete a unique path |
+| Editing | Tab / Shift+Tab | Save and move to the next / previous setting |
+| Editing | Alt+/ | Complete a unique path |
 | Search | Enter / Esc | Finish / clear search |
 | Review | Enter / Esc / c | Run / edit / toggle command preview |
 | Results | ↑/↓, PageUp/PageDown | Select a row or scroll |
