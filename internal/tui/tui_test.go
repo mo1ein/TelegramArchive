@@ -189,7 +189,7 @@ func TestModelSearchEditReviewAndReturn(t *testing.T) {
 		return func() tea.Msg { return finishedMsg{elapsed: time.Second} }
 	}
 	m = update(m, key('/', "/"))
-	m = update(m, tea.PasteMsg{Content: "BACK UP"})
+	m = update(m, tea.PasteMsg{Content: "BACK UP CHATS"})
 	if len(m.filteredActions()) != 1 {
 		t.Fatal(m.filteredActions())
 	}
@@ -385,4 +385,33 @@ func TestTerminalHelper(t *testing.T) {
 		os.Exit(2)
 	}
 	os.Exit(0)
+}
+
+func TestRebuildArchiveIsAnOfflineToolWithSearchableCommandName(t *testing.T) {
+	root, _ := fixture()
+	root.AddCommand(&cobra.Command{Use: "render ARCHIVE_DIRECTORY", Args: cobra.ExactArgs(1), RunE: func(*cobra.Command, []string) error { panic("must not execute") }})
+	m := New(Catalog(root), nil, "default", context.Background())
+	m.group = slices.Index(Groups, "Backups")
+	for _, action := range m.filteredActions() {
+		if slices.Equal(action.Path, []string{"render"}) {
+			t.Fatal("offline rebuild is still listed as a backup")
+		}
+	}
+	m.group = slices.Index(Groups, "Tools")
+	found := false
+	for _, action := range m.filteredActions() {
+		if slices.Equal(action.Path, []string{"render"}) {
+			found = true
+			if action.Title != "Rebuild archive files" || !strings.Contains(action.Description, "No Telegram connection") {
+				t.Fatal("offline tool lacks a clear explanation")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("offline rebuild is missing from Tools")
+	}
+	m.search = "render"
+	if len(m.filteredActions()) != 1 || m.filteredActions()[0].Title != "Rebuild archive files" {
+		t.Fatal("CLI name must remain searchable")
+	}
 }

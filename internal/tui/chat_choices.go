@@ -125,6 +125,10 @@ func (m *Model) stopChatLookup() {
 }
 
 func (m *Model) closePicker() {
+	if m.cronCancel != nil {
+		m.cronCancel()
+		m.cronCancel = nil
+	}
 	m.stopChatLookup()
 	m.picker = nil
 }
@@ -149,7 +153,7 @@ func (m *Model) loadChatChoices(refresh bool) tea.Cmd {
 		return nil
 	}
 	m.stopChatLookup()
-	p.loadErr = ""
+	p.loadErr, p.loadedChats = "", 0
 	plan, err := m.chatChoicePlan()
 	if err != nil {
 		if !errors.Is(err, errNoChatBrowser) {
@@ -219,6 +223,7 @@ func (m *Model) pollChatChoices(lookup *chatLookup) tea.Cmd {
 	if m.chatLookup != lookup || m.picker != lookup.picker || lookup.job == nil {
 		return nil
 	}
+	m.loader, _ = m.loader.Update(m.loader.Tick())
 	j := lookup.job
 	j.mu.Lock()
 	count := len(j.items)
@@ -235,6 +240,7 @@ func (m *Model) pollChatChoices(lookup *chatLookup) tea.Cmd {
 	if count != lookup.count {
 		m.mergeChatChoices(rows)
 		lookup.count = count
+		lookup.picker.loadedChats = count
 	}
 	if stage != "" {
 		lookup.picker.loadStage = stage

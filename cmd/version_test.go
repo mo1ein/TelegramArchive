@@ -37,3 +37,22 @@ func TestInstalledVersionWorksWithoutSessionStorage(t *testing.T) {
 		})
 	}
 }
+
+func TestTUIVersionDistinguishesReleasesFromDevelopmentBuilds(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{"", ""},
+		{"dev", "dev"},
+		{"(devel)", "dev"},
+		{"v1.2.3", "v1.2.3"},
+		{"v1.2.3-rc.1", "v1.2.3-rc.1"},
+		{"v0.0.0-20261113183136-66ce76672a0d+dirty", "dev"},
+		{"v0.0.0-20261113183136-66ce76672a0d", "dev"},
+		{"v1.2.3+dirty", "dev"},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			if got := tuiVersion(tc.input); got != tc.want {
+				t.Fatalf("tuiVersion(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}

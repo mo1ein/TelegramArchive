@@ -26,6 +26,7 @@ const (
 )
 
 type Model struct {
+	version                            string
 	actions                            []Action
 	base                               []string
 	globals                            map[string]string
@@ -68,6 +69,9 @@ type Model struct {
 	err                                            string
 	accounts, accountSelection                     []string
 	accountLoader                                  AccountLoader
+	cronLoader                                     CronJobLoader
+	cronRequest                                    uint64
+	cronCancel                                     context.CancelFunc
 	accountsLoaded                                 bool
 	accountError                                   string
 	picker                                         *choicePicker
@@ -95,6 +99,11 @@ func New(actions []Action, base []string, namespace string, ctx context.Context,
 	return m
 }
 
+// WithVersion supplies display-only build information for the workspace header.
+func WithVersion(version string) Option {
+	return func(m *Model) { m.version = safeText(strings.TrimSpace(version)) }
+}
+
 func (m Model) Init() tea.Cmd { return m.loadAccounts() }
 
 func (m Model) filteredActions() []Action {
@@ -107,10 +116,8 @@ func (m Model) filteredActions() []Action {
 			if Groups[m.group] != "All commands" && action.Group != Groups[m.group] {
 				continue
 			}
-		} else if action.Group == "Quick start" {
-			continue
 		}
-		if matches(action.Title+" "+action.Description+" "+action.Group, m.search) {
+		if matches(action.Title+" "+action.Description+" "+action.Group+" "+strings.Join(action.Path, " "), m.search) {
 			out = append(out, action)
 		}
 	}
@@ -160,6 +167,9 @@ func (m *Model) open(action Action) {
 	m.buttonsFocused = false
 	m.showCommand = false
 	m.buttonFocus = 0
+	if m.downloadForm() {
+		m.editField()
+	}
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -170,6 +180,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.offset = choiceListWindow(m.inlineChoiceBounds().height, len(p.filtered()), p.cursor, p.offset).start
 	}
 	switch msg := msg.(type) {
+	case cronJobsLoadedMsg:
+		m.cronJobsLoaded(msg)
+		return m, nil
 	case chatLookupStartedMsg:
 		return m, m.chatLookupStarted(msg)
 	case chatLookupPollMsg:
@@ -219,7 +232,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			b.name, _ = b.name.Update(nil)
 		}
 		if m.picker != nil {
-			m.picker.query.SetWidth(max(1, min(60, m.formLayout(m.width-4, m.height-9).controlWidth)-5))
+			m.picker.query.SetWidth(m.choiceQueryWidth())
 			m.picker.query, _ = m.picker.query.Update(nil)
 		}
 		if m.editing || m.searching {
@@ -358,7 +371,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.calendar != nil {
 			if m.calendarBounds().contains(msg.X, msg.Y) {
-				m.calendar.moveMonth(delta / 3)
+				if m.calendar.years {
+					m.calendar.moveYear(delta / 3 * 20)
+				} else {
+					m.calendar.moveMonth(delta / 3)
+				}
 			}
 			return m, nil
 		}
@@ -380,6 +397,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				m.picker.cursor = max(0, min(max(0, len(m.picker.filtered())-1), m.picker.cursor+step))
+				return m, nil
+			}
+			if m.chatFinder() {
 				return m, nil
 			}
 			m.applyPicker()
@@ -411,6 +431,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.PasteMsg:
 		if m.calendar != nil {
+			if m.calendar.years {
+				m.calendar.yearText, m.calendar.yearError = strings.TrimSpace(msg.Content), ""
+				return m, nil
+			}
 			m.typeDate()
 			return m, m.updateEditor(msg)
 		}
@@ -540,7 +564,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.buttonsFocused && key == "enter" {
-			return m, m.activate(m.buttons()[m.buttonFocus].ID)
+			return m, m.activate(m.buttons()[m.focusedButton()].ID)
 		}
 		switch m.screen {
 		case running:

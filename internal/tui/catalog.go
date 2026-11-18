@@ -21,16 +21,21 @@ type Action struct {
 var Groups = []string{"Quick start", "All commands", "Backups", "Automation", "Transfers", "Accounts", "Chat tools", "Tools"}
 
 // Catalog uses Cobra as the source of truth, including installed extensions.
-// Hidden commands and implementation-only flags stay outside the interface.
+// Hidden commands, header-only version info, and implementation-only flags stay outside the interface.
 func Catalog(root *cobra.Command) []Action {
 	var actions []Action
 	var walk func(*cobra.Command, []string)
 	walk = func(cmd *cobra.Command, path []string) {
-		if cmd.Hidden || cmd.Deprecated != "" || cmd.Name() == "tui" || cmd.Name() == "help" {
+		if cmd.Hidden || cmd.Deprecated != "" || cmd.Name() == "tui" || cmd.Name() == "help" || (len(path) == 1 && cmd.Name() == "version") {
 			return
 		}
 		if len(path) > 0 && cmd.Runnable() {
-			actions = append(actions, Action{Title: strings.Join(path, " "), Description: cmd.Short, Group: group(path), Path: slices.Clone(path), Command: cmd})
+			action := Action{Title: strings.Join(path, " "), Description: cmd.Short, Group: group(path), Path: slices.Clone(path), Command: cmd}
+			if strings.Join(path, " ") == "render" {
+				action.Title = "Rebuild archive files"
+				action.Description = "Recreate HTML or JSON from an existing local archive. No Telegram connection."
+			}
+			actions = append(actions, action)
 		}
 		for _, child := range cmd.Commands() {
 			walk(child, append(slices.Clone(path), child.Name()))
@@ -67,7 +72,7 @@ func Catalog(root *cobra.Command) []Action {
 
 func group(path []string) string {
 	switch path[0] {
-	case "archive", "account", "sync", "render", "stats":
+	case "archive", "account", "sync", "stats":
 		return "Backups"
 	case "cron", "schedule":
 		return "Automation"
@@ -177,6 +182,9 @@ func NewForm(action Action, globals map[string]string) Form {
 		argument.PathKind = "directory"
 	case "stats":
 		argument.PathKind, argument.PathMultiple = "open", true
+	case "cron logs", "cron remove":
+		argument.Type, argument.Label = "cron-job", "Job name"
+		argument.Help = "Choose a saved scheduled backup. Ctrl+L refreshes the job list."
 	}
 	slices.SortStableFunc(form.Fields, func(a, b Field) int {
 		rank := func(f Field) int {
@@ -190,6 +198,9 @@ func NewForm(action Action, globals map[string]string) Form {
 		}
 		return rank(a) - rank(b)
 	})
+	if strings.Join(action.Path, " ") == "download" {
+		form.configureDownload()
+	}
 	return form
 }
 
@@ -264,7 +275,7 @@ func (f Field) optionLabel(value string) string {
 	if label, ok := f.ChoiceLabels[value]; ok {
 		return safeText(label)
 	}
-	if customChoices(f) {
+	if customChoices(f) || f.Type == "cron-job" {
 		return safeText(value)
 	}
 	return choiceLabel(f.Name, value)
