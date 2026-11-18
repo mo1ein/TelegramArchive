@@ -161,12 +161,13 @@ func (m *Model) startTask() tea.Cmd {
 	m.pendingAction = ""
 	m.pendingSelection = ""
 	m.meter = newProgress()
+	m.downloads, m.downloadsStarted = nil, false
 	m.cachedAt = time.Time{}
 	m.stage = ""
 	m.started = time.Now()
 	taskCtx, cancel := context.WithCancel(m.ctx)
 	m.taskCancel = cancel
-	m.plan.width, m.plan.height = max(20, m.width-6), max(5, m.height-17)
+	m.plan.width, m.plan.height = m.plan.terminalSize(m.width-6, m.height-17)
 	m.screen = running
 	m.last = finishedMsg{}
 	m.output = ""

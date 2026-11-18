@@ -224,3 +224,49 @@ func TestChatFieldLoadsNamesWithoutOpeningTheChatBrowserFirst(t *testing.T) {
 		t.Fatalf("selected chat IDs did not reach the backup plan: %v", err)
 	}
 }
+
+func TestChatSelectorShowsLoadingBeforeAndDuringDelayedResults(t *testing.T) {
+	for _, width := range []int{55, 80, 120} {
+		m := chatChoiceModel(t)
+		m.width, m.height = width, 24
+		j := &job{terminal: newTranscript(80, 24), streamSeen: true, cancel: func() {}}
+		m.run = func(context.Context, Plan) tea.Cmd { return func() tea.Msg { return startedMsg{j} } }
+		focusField(&m, "chat")
+		next, start := m.Update(key(tea.KeyEnter, ""))
+		m = next.(Model)
+		if start == nil || !strings.Contains(ansi.Strip(m.View().Content), "Loading chats") {
+			t.Fatal("loading must be visible before the worker starts")
+		}
+		m.picker.query.SetValue("Delayed")
+		view := ansi.Strip(m.View().Content)
+		if strings.Contains(view, "No matching options") || !strings.Contains(view, "Waiting for matching") {
+			t.Fatal("a pending lookup must not look like an empty finished list")
+		}
+		next, poll := m.Update(start())
+		m = next.(Model)
+		before := m.loader.View()
+		next, poll = m.Update(poll())
+		m = next.(Model)
+		if m.loader.View() == before || poll == nil {
+			t.Fatal("loading spinner did not advance while waiting")
+		}
+		j.items, j.stage = []item{{ID: "42", Title: "Delayed chat"}}, "Loading more chats…"
+		next, poll = m.Update(poll())
+		m = next.(Model)
+		view = ansi.Strip(m.View().Content)
+		if !m.picker.loading || m.picker.loadedChats != 1 || !strings.Contains(view, "Loading chats · 1") || !strings.Contains(view, "Delayed chat") {
+			t.Fatal("partial results must stay selectable with loading progress")
+		}
+		for _, line := range strings.Split(view, "\n") {
+			if ansi.StringWidth(line) > width {
+				t.Fatalf("loading display overflowed width %d", width)
+			}
+		}
+		j.done = true
+		m = update(m, poll())
+		if m.picker.loading || strings.Contains(ansi.Strip(m.View().Content), "Loading chats") {
+			t.Fatal("loading state did not clear after completion")
+		}
+		m.closePicker()
+	}
+}

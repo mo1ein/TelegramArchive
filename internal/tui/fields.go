@@ -20,6 +20,8 @@ func essential(path []string, name string) bool {
 		names = []string{"everything", "chat", "all", "media", "format", "output", "since", "until"}
 	case "account":
 		names = []string{"include", "media", "format", "output", "since", "until"}
+	case "download":
+		names = []string{"url", "dir", "ns", "group", "skip-same"}
 	case "login":
 		names = []string{"type", "desktop", "passcode", "ns"}
 	case "cron add":

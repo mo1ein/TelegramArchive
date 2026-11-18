@@ -12,6 +12,14 @@ import (
 func (m Model) taskView(width, height int) string {
 	if m.screen == running {
 		heading := "Working"
+		if m.plan.downloadProgress() {
+			heading = "Preparing download"
+			if len(m.downloads) > 0 {
+				heading = "Downloading files"
+			} else if m.downloadsStarted {
+				heading = "Finalizing downloads"
+			}
+		}
 		if m.stage != "" {
 			heading = m.stage
 		}
@@ -24,7 +32,9 @@ func (m Model) taskView(width, height int) string {
 			title = fmt.Sprintf("Account %d / %d · %s", m.batchIndex+1, len(m.plan.Tasks), m.plan.Tasks[m.batchIndex].Account)
 		}
 		lines := []string{accent.Render(m.loader.View()+" "+clip(heading, width-len(elapsed)-4)) + dim.Render("  "+elapsed), titleStyle.Render(clip(title, width)), ""}
-		if m.status != nil {
+		if m.plan.downloadProgress() {
+			lines = append(lines, m.downloadProgressView(width, height), "")
+		} else if m.status != nil {
 			lines = append(lines, m.progressView(width), "")
 		} else if len(m.progress) == 3 {
 			lines = append(lines, clip(m.progress[0], width), accent.Render(clip(m.progress[1], width)), dim.Render(clip(m.progress[2], width)), "")
@@ -39,6 +49,9 @@ func (m Model) taskView(width, height int) string {
 		output := m.output
 		if output == "" {
 			output = "Preparing your backup…"
+			if m.plan.downloadProgress() {
+				output = "Download updates will appear here."
+			}
 			if m.status != nil {
 				output = "Files and updates will appear here."
 			}

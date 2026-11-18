@@ -9,7 +9,9 @@ import (
 )
 
 func newProgress() progress.Model {
-	return progress.New(progress.WithColors(mint, violet), progress.WithoutPercentage())
+	meter := progress.New(progress.WithColors(mint, violet), progress.WithoutPercentage(), progress.WithSpringOptions(24, 1))
+	meter.EmptyColor = line
+	return meter
 }
 
 func (m Model) progressView(width int) string {

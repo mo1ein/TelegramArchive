@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"runtime"
 	"runtime/debug"
+	"strings"
 
 	"github.com/gotd/td/tg"
 	"github.com/mo1ein/TelegramArchive/consts"
 	"github.com/spf13/cobra"
+	"golang.org/x/mod/module"
 )
 
 func NewVersion() *cobra.Command {
@@ -32,4 +34,13 @@ func version() string {
 		return info.Main.Version
 	}
 	return consts.Version
+}
+
+// tuiVersion keeps build diagnostics out of the compact workspace header.
+// The version command retains the complete identifier.
+func tuiVersion(version string) string {
+	if version == "(devel)" || module.IsPseudoVersion(strings.TrimSuffix(version, "+dirty")) || strings.HasSuffix(version, "+dirty") {
+		return "dev"
+	}
+	return version
 }

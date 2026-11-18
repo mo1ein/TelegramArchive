@@ -75,6 +75,10 @@ func (m *Model) saveInput() bool {
 
 func (m *Model) updateEditor(msg tea.Msg) tea.Cmd {
 	var command tea.Cmd
+	if paste, ok := msg.(tea.PasteMsg); ok && m.editingDownloadURL() {
+		paste.Content = strings.Join(strings.Fields(paste.Content), " ")
+		msg = paste
+	}
 	m.editor.SetWidth(m.editorWidth())
 	m.editor, command = m.editor.Update(msg)
 	m.input, m.cursor = []rune(m.editor.Value()), m.editor.Position()
@@ -88,6 +92,9 @@ func (m Model) editorWidth() int {
 	case configure:
 		if m.searching {
 			return max(1, width-1)
+		}
+		if m.editingDownloadURL() {
+			return max(1, width-5)
 		}
 		layout := m.formLayout(width, m.height-9)
 		return max(1, layout.controlWidth-3)
@@ -111,6 +118,9 @@ func (m Model) updateInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.editing, m.searching = false, false
 		m.editor.Blur()
 	case "enter":
+		if m.editingDownloadURL() {
+			return m, m.startDownload()
+		}
 		if m.saveInput() {
 			m.searching = false
 			m.editor.Blur()
@@ -162,6 +172,9 @@ func (m Model) updateInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func placeholder(field Field) string {
+	if field.Type == "links" {
+		return "Paste a Telegram link here…"
+	}
 	switch field.Name {
 	case "chat":
 		return "@channel, chat ID, or me for Saved Messages"

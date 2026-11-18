@@ -32,6 +32,12 @@ Start with the dashboard's buttons or the first three Quick start workflows:
 | Accounts | See saved namespaces and their status. Use account applies the selected namespace to subsequent workflows. Busy or unavailable accounts cannot be activated. |
 | Scheduled backups | Select a schedule to run its backup, view logs or remove the schedule. Running and removal require review; removal keeps archives and logs. |
 
+**cron logs** and **cron remove** have a **Job name** selector populated from
+the same saved jobs as `cron list`. Open it and search or choose a job; each
+entry shows its schedule and whether it is installed. Enter or click opens
+logs immediately. Removal opens Review and requires **Run** to confirm; archives
+and logs are kept. **Refresh** or Ctrl+L reloads the list.
+
 The chat browser shows each page as it arrives, including archived chats. It
 reports connection and loading stages instead of waiting for every chat and
 forum topic. Connection setup is limited to 30 seconds, page requests to 20
@@ -56,6 +62,10 @@ The cache holds up to eight lists in memory, keyed by account, filters and
 connection settings. Nothing is saved to a chat-cache file, and restarting ta
 requires a fresh load. Login, recovery and migration tasks clear cached lists.
 
+**Rebuild archive files** lives in **Tools**. It recreates HTML or JSON from an
+existing local archive without connecting to Telegram (the CLI command is
+`ta render`). Use it to refresh the presentation of files you already backed up.
+
 Offline statistics have summary cards and selectable totals and breakdowns.
 Other tools retain their output in the Activity view. You can edit settings,
 review another run, or return Home from the result screen.
@@ -66,15 +76,34 @@ Click a bottom action button, or use **F6** to move focus between the current
 panel and its buttons. When buttons have focus, Tab/Shift+Tab or ←/→ selects one
 and Enter activates it. On task and result screens, Tab also focuses the buttons.
 Narrow terminals scroll the button row to keep the focused action visible.
+The focused button has a ▸ marker, including without color; the footer shows
+its position among all available actions. The header identifies Settings,
+Review, Progress or Results so you can keep track of the workflow. The keyboard
+guide has its own Close guide button.
 
-The workspace keeps every public command, including extensions, in its command
-catalogue. Tab or ←/→ changes dashboard sections; `/` searches every section.
+The workspace keeps task commands, including extensions, in its command
+catalogue. Version information is plain text in the header when available;
+it has no task page or account selector. `ta version` remains available in the CLI. Tab or ←/→ changes dashboard sections; `/` searches every section.
 Installed extensions appear when the workspace starts; reopen it after changing
 the installed extensions.
 
 Quick start also includes QR login, Saved Messages, all joined channels,
 a complete incremental backup, account data and recurring backups. Presets fill
 in options for you to review and change.
+
+## Download from a link
+
+Open **download** to paste a Telegram message link into the focused, bordered URL box.
+Press Enter or click **Download** to start. You do not need to type a command,
+flags, or “arguments.” Paste several links separated by spaces or newlines to
+download them together. Links without `https://` are completed automatically.
+
+Tab moves to **Save to folder**, **Saved account**, **Download entire album**,
+and **Skip existing files**. **More options** exposes extension filters, Telegram
+export files, naming, connection settings and every other download option (all 15 download flags and 12 inherited settings).
+You can leave the URL empty when using Telegram export files instead.
+Ctrl+R opens a review before starting if you want to inspect the settings.
+Only Telegram message links are supported; this is not a YouTube downloader.
 
 ## Configure and review
 
@@ -103,8 +132,19 @@ Media offers **All media**, **No media**, or individual categories.
 Single-choice fields use a dropdown and apply the highlighted option with Enter.
 Export format offers **JSON**, **HTML**, and **Both**; Both exports JSON and HTML.
 
-**Chats to back up** loads the selected account's chat names directly when you
-open the field. You can search and check chats as pages arrive, including
+**Chats to back up** opens a large, searchable picker that fills the workspace.
+Type a name, ID, or abbreviation such as `bkcl` for “Book Club.” Enter or Space
+checks a chat; Tab checks it and moves to the next row. Ctrl+N/Ctrl+P or arrows
+navigate, and PageUp/PageDown move by a full page. Ctrl+Enter or **Use selected
+chats** saves the checks and returns to the form. Esc cancels without changing
+the saved selection. F6 focuses the bottom buttons. Other choice fields keep
+their compact dropdowns. Use **Add** to include a manual chat username or ID;
+search text is not added when you apply checked chats.
+
+The picker loads the selected account's chats when opened and immediately shows
+**Loading chats** with a spinner,
+then a received-chat count while more results arrive. Matching results stay
+selectable during loading. You can search and check chats as pages arrive, including
 archived chats and Saved Messages. Choices save chat IDs while showing names.
 **Stop loading** keeps received chats available; **Reload chats** or Ctrl+L
 retries the lookup. Completed lists are reused for the same account and
@@ -117,7 +157,10 @@ Leave them empty for no limit. Since is inclusive and Until is exclusive.
 Enter or **Calendar** opens a calendar beside the field; shorter terminals show
 a compact calendar view. Click a day to select it, or use the arrow keys and
 Enter. PageUp/PageDown, the month arrows, or the wheel over the calendar change
-months. **Today** highlights today; **Clear** removes the date limit. Esc cancels
+months. Click the month/year heading or press **Y** to choose a year. The year
+grid shows 20 years at once: click one, use arrows, or type/paste a year and
+press Enter. PageUp/PageDown and the grid arrows jump 20 years. Choosing a year
+returns to the day calendar; Esc discards the year edit. **Today** highlights today; **Clear** removes the date limit. Esc cancels
 without changing the saved value. Tab saves the highlighted day and moves on.
 **Type date/time** keeps manual entry available: use `2026-11-01` for a date,
 `2026-11-01T18:30:00+03:30` for a time with a time zone, or Unix seconds.
@@ -214,6 +257,13 @@ total is known. They do not show a guessed percentage. Activity output updates
 without taking over the terminal. When a task finishes, its result stays visible;
 there is no extra Enter-to-return prompt.
 
+URL downloads use matching animated Bubbles bars for each active file, with
+percentage, transferred bytes, speed and ETA when the downloader reports them.
+The panel adapts to terminal height and shows how many additional files are
+active. Connecting and unknown file sizes show a spinner without an invented
+percentage. Prompts, completed transfers and errors remain in Activity; HTTP
+serve mode retains its normal activity display.
+
 If a login or another task asks for input, choose **Respond** or press `i`.
 Type into the displayed prompt and press Enter. Password prompts mask their
 input; account choices accept arrow keys. Press Esc to return to workspace
@@ -282,6 +332,9 @@ edit the proxy for the current workspace session.
 | Calendar | Arrow keys / Enter | Move between days / choose a day |
 | Calendar | PageUp / PageDown | Previous / next month |
 | Calendar | Ctrl+PageUp / Ctrl+PageDown | Previous / next year |
+| Calendar | Y / click month-year heading | Open year selection |
+| Year selection | Type/paste year, then Enter | Jump directly to a year |
+| Year selection | PageUp / PageDown | Previous / next 20 years |
 | Calendar | T / Delete / I | Highlight today / clear the limit / type a timestamp |
 | Calendar | Esc | Cancel without changing the date |
 | Paths | Enter / Alt+O / Browse… | Open the file or folder chooser |

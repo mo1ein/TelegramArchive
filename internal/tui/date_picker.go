@@ -13,8 +13,11 @@ import (
 const calendarWidth, calendarHeight = 30, 9
 
 type datePicker struct {
-	field string
-	day   time.Time
+	field               string
+	day                 time.Time
+	years               bool
+	yearCursor          int
+	yearText, yearError string
 }
 
 func dateField(field Field) bool { return field.Name == "since" || field.Name == "until" }
@@ -90,10 +93,13 @@ func (m Model) calendarBounds() choiceBounds {
 
 func (m Model) calendarView() string {
 	p := m.calendar
+	if p.years {
+		return m.yearPickerView()
+	}
 	frame := lipgloss.NewStyle().Foreground(violet)
-	heading := p.day.Format("January 2006")
+	heading := p.day.Format("January 2006") + " ▾"
 	inner := calendarWidth - 2
-	space := calendarWidth - len(heading) - 6
+	space := calendarWidth - lipgloss.Width(heading) - 6
 	lines := []string{
 		frame.Render("╭ ") + selectedStyle.Render("‹") + strings.Repeat(" ", space/2) + titleStyle.Render(heading) + strings.Repeat(" ", space-space/2) + selectedStyle.Render("›") + frame.Render(" ╮"),
 		frame.Render("│") + dim.Render(" Mo  Tu  We  Th  Fr  Sa  Su ") + frame.Render("│"),
@@ -138,9 +144,14 @@ func (m *Model) calendarAction(id string) bool {
 	}
 	switch id {
 	case "date-choose":
+		if m.calendar.years {
+			m.calendar.chooseYear()
+			return true
+		}
 		m.applyDatePicker(m.calendar.day.Format("2006-01-02"))
 	case "date-today":
 		m.calendar.day = calendarDay(time.Now())
+		m.calendar.years = false
 	case "date-clear":
 		m.applyDatePicker("")
 	case "date-type":
@@ -173,6 +184,9 @@ func (m Model) updateDatePicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	p := m.calendar
+	if p.years {
+		return m.updateYearPicker(msg)
+	}
 	switch key {
 	case "esc":
 		m.closeDatePicker()
@@ -196,6 +210,8 @@ func (m Model) updateDatePicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		p.day = p.day.AddDate(0, 0, 1-p.day.Day())
 	case "end":
 		p.day = time.Date(p.day.Year(), p.day.Month()+1, 0, 0, 0, 0, 0, time.UTC)
+	case "y":
+		p.openYears()
 	case "t":
 		m.calendarAction("date-today")
 	case "delete", "backspace", "ctrl+d":
@@ -233,11 +249,17 @@ func (m Model) datePickerClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	b := m.calendarBounds()
 	x, y := msg.X-b.x, msg.Y-b.y
 	if b.contains(msg.X, msg.Y) {
+		if m.calendar.years {
+			m.calendar.yearClick(x, y)
+			return m, nil
+		}
 		switch {
 		case y == 0 && x >= 1 && x <= 3:
 			m.calendar.moveMonth(-1)
 		case y == 0 && x >= b.width-4 && x <= b.width-2:
 			m.calendar.moveMonth(1)
+		case y == 0 && x > 3 && x < b.width-4:
+			m.calendar.openYears()
 		case y >= 2 && y < 8 && x >= 1 && x < b.width-1:
 			day := m.calendar.firstCell().AddDate(0, 0, (y-2)*7+(x-1)/4)
 			m.applyDatePicker(day.Format("2006-01-02"))

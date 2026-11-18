@@ -27,10 +27,14 @@ type choicePicker struct {
 	loading      bool
 	loadStage    string
 	loadErr      string
+	loadedChats  int
+	fuzzy        bool
+	jobs         bool
 }
 
 func newChoicePicker(field Field, width int) *choicePicker {
 	p := &choicePicker{field: field.Name, title: field.Label, choices: slices.Clone(field.Choices), labels: maps.Clone(field.ChoiceLabels), selected: map[string]bool{}, multi: field.Multi, query: textinput.New()}
+	p.jobs = field.Type == "cron-job"
 	p.custom = customChoices(field)
 	p.query.Prompt, p.query.Placeholder, p.query.CharLimit = "", "Type to filter options…", 256
 	if p.custom {
@@ -68,7 +72,14 @@ func (m *Model) openPicker(field Field) tea.Cmd {
 		}
 	}
 	m.picker, m.err, m.buttonsFocused = p, "", false
-	p.query.SetWidth(max(1, min(60, m.formLayout(m.width-4, m.height-9).controlWidth)-5))
+	if m.chatFinder() {
+		p.fuzzy = true
+		p.query.Placeholder = "Search chats by name or ID…"
+	}
+	p.query.SetWidth(m.choiceQueryWidth())
+	if p.jobs {
+		return m.loadCronJobs()
+	}
 	if field.Name == "ns" {
 		return m.loadAccounts()
 	}
@@ -84,7 +95,7 @@ func (p *choicePicker) filtered() []string {
 		if p.selectedOnly && !p.selected[value] {
 			continue
 		}
-		if matches(p.label(value)+" "+value, p.query.Value()) {
+		if matches(p.label(value)+" "+value, p.query.Value()) || (p.fuzzy && fuzzyChatMatch(p.label(value)+" "+value, p.query.Value())) {
 			values = append(values, value)
 		}
 	}
@@ -197,7 +208,9 @@ func (m *Model) applyPicker() {
 	if field == nil {
 		return
 	}
-	p.addCustom()
+	if !m.chatFinder() {
+		p.addCustom()
+	}
 	values := p.values()
 	if !p.multi {
 		rows := p.filtered()
@@ -236,11 +249,65 @@ func (m Model) updatePicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	p := m.picker
 	rows := p.filtered()
 	inline := m.inlinePicker()
-	if p.multi && msg.String() == "left" {
+	if p.multi && msg.String() == "left" && !m.buttonsFocused && (!m.chatFinder() || !p.searching) {
 		m.applyPicker()
 		return m, nil
 	}
-	if inline {
+	if m.chatFinder() {
+		if msg.String() == "esc" {
+			m.closePicker()
+			m.buttonsFocused = false
+			return m, nil
+		}
+		if msg.String() == "f6" {
+			m.buttonsFocused = !m.buttonsFocused
+			m.buttonFocus = 0
+			return m, nil
+		}
+	}
+	if m.chatFinder() && !m.buttonsFocused {
+		switch msg.String() {
+		case "ctrl+enter":
+			m.applyPicker()
+			return m, nil
+		case "ctrl+r":
+			m.applyPicker()
+			if m.picker == nil {
+				m.prepareReview()
+			}
+			return m, nil
+		case "ctrl+l":
+			return m, m.loadChatChoices(true)
+		case "ctrl+f", "/":
+			if msg.String() == "ctrl+f" || !p.searching {
+				p.searching = true
+				p.query.Focus()
+				return m, nil
+			}
+		case "tab", "shift+tab":
+			if len(rows) > 0 {
+				p.toggle(rows[p.cursor])
+			}
+			delta := 1
+			if msg.String() == "shift+tab" {
+				delta = -1
+			}
+			p.cursor = max(0, min(max(0, len(p.filtered())-1), p.cursor+delta))
+			p.searching = false
+			p.query.Blur()
+			return m, nil
+		case "ctrl+n", "ctrl+p":
+			delta := 1
+			if msg.String() == "ctrl+p" {
+				delta = -1
+			}
+			p.cursor = max(0, min(max(0, len(rows)-1), p.cursor+delta))
+			p.searching = false
+			p.query.Blur()
+			return m, nil
+		}
+	}
+	if inline && !m.chatFinder() {
 		switch msg.String() {
 		case "tab", "shift+tab", "f6", "ctrl+r", "ctrl+enter":
 			m.applyPicker()
@@ -266,6 +333,9 @@ func (m Model) updatePicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "ctrl+l":
+			if p.jobs {
+				return m, m.loadCronJobs()
+			}
 			if p.field == "ns" {
 				return m, m.loadAccounts()
 			}
@@ -288,7 +358,7 @@ func (m Model) updatePicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.buttonFocus = (m.buttonFocus + len(m.buttons()) + delta) % len(m.buttons())
 			return m, nil
 		case "enter":
-			return m, m.activate(m.buttons()[m.buttonFocus].ID)
+			return m, m.activate(m.buttons()[m.focusedButton()].ID)
 		case "esc", "up", "down":
 			m.buttonsFocused = false
 			return m, nil
@@ -301,7 +371,9 @@ func (m Model) updatePicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		p.clear()
 	case "ctrl+s":
 		if p.multi {
-			p.addCustom()
+			if !m.chatFinder() {
+				p.addCustom()
+			}
 			p.selectedOnly, p.cursor = !p.selectedOnly, 0
 			p.query.SetValue("")
 			p.searching = false
@@ -352,7 +424,7 @@ func (m Model) updatePicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		p.cursor = max(0, min(max(0, len(rows)-1), p.cursor+delta))
 	case "enter":
-		if p.custom && p.searching && strings.TrimSpace(p.query.Value()) != "" {
+		if p.custom && p.searching && strings.TrimSpace(p.query.Value()) != "" && (!m.chatFinder() || len(rows) == 0) {
 			p.addCustom()
 			return m, nil
 		}
@@ -364,6 +436,9 @@ func (m Model) updatePicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			p.cursor = max(0, min(max(0, len(p.filtered())-1), p.cursor))
 		}
 		if !p.multi {
+			if p.jobs {
+				return m, m.acceptCronJob()
+			}
 			m.applyPicker()
 		}
 	case "space", " ":
@@ -383,7 +458,7 @@ func (m Model) updatePicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if msg.Text != "" || msg.String() == "backspace" || msg.String() == "ctrl+u" {
 			p.searching = true
 			p.query.Focus()
-			p.query.SetWidth(max(1, min(60, m.formLayout(m.width-4, m.height-9).controlWidth)-5))
+			p.query.SetWidth(m.choiceQueryWidth())
 			p.query, _ = p.query.Update(msg)
 			p.cursor = 0
 		}
@@ -398,6 +473,12 @@ func (m Model) pickerClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if m.inlinePicker() {
 		if handled, command := m.inlineChoiceClick(msg); handled {
 			return m, command
+		}
+		if m.chatFinder() {
+			if msg.Y == m.height-5 {
+				return m.mouseClick(msg)
+			}
+			return m, nil
 		}
 		layout := m.formLayout(m.width-4, m.height-9)
 		index, fieldHit := layout.fieldAtRow(msg.Y - 3 - layout.top)

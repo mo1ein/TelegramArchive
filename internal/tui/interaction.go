@@ -12,6 +12,12 @@ import (
 type button struct{ ID, Label string }
 
 func (m Model) buttons() []button {
+	if m.help {
+		return []button{{"close-help", "Close guide"}}
+	}
+	if m.chatFinder() {
+		return []button{{"picker-apply", "Use selected chats"}, {"picker-cancel", "Cancel"}}
+	}
 	if m.calendar != nil && !m.inlineCalendar() {
 		return []button{{"date-choose", "Choose"}, {"date-today", "Today"}, {"date-clear", "Clear"}, {"date-type", "Type date/time"}, {"date-cancel", "Cancel"}}
 	}
@@ -31,6 +37,9 @@ func (m Model) buttons() []button {
 	case dashboard:
 		return []button{{"open", "Open"}, {"accounts", "Accounts"}, {"chats", "Chats"}, {"schedules", "Schedules"}}
 	case configure:
+		if m.downloadForm() {
+			return []button{{"back", "Back"}, {"download-start", "Download"}, {"advanced", "More options"}}
+		}
 		if m.source != nil {
 			return []button{{"list", "Back to list"}, {"review", "Review"}, {"advanced", "More options"}}
 		}
@@ -82,12 +91,25 @@ func (m Model) buttons() []button {
 	}
 	return []button{{"home", "Home"}}
 }
-func (m Model) buttonBar(width int) string {
+
+// buttonLayout is shared by rendering and hit testing so scrolled actions
+// always respond at their displayed position.
+type buttonPlacement struct {
+	button
+	index, x, width int
+}
+
+func (m Model) focusedButton() int {
+	return max(0, min(m.buttonFocus, len(m.buttons())-1))
+}
+
+func (m Model) buttonLayout(width int) []buttonPlacement {
 	buttons := m.buttons()
+	focus := m.focusedButton()
 	start := 0
-	for start < m.buttonFocus {
-		size := 0
-		for i := start; i <= m.buttonFocus; i++ {
+	for start < focus {
+		size := -1
+		for i := start; i <= focus; i++ {
 			size += lipgloss.Width(buttons[i].Label) + 5
 		}
 		if size <= width {
@@ -95,20 +117,30 @@ func (m Model) buttonBar(width int) string {
 		}
 		start++
 	}
-	parts := []string{}
-	used := 0
+	var placements []buttonPlacement
+	x := 0
 	for i := start; i < len(buttons); i++ {
-		label := "[ " + buttons[i].Label + " ]"
-		size := lipgloss.Width(label)
-		if used+size > width {
+		size := lipgloss.Width(buttons[i].Label) + 4
+		if x+size > width {
 			break
 		}
+		placements = append(placements, buttonPlacement{buttons[i], i, x, size})
+		x += size + 1
+	}
+	return placements
+}
+
+func (m Model) buttonBar(width int) string {
+	var parts []string
+	for _, placement := range m.buttonLayout(width) {
+		label := "[ " + placement.Label + " ]"
 		style := selectedStyle
-		if i == m.buttonFocus && m.buttonsFocused {
+		if placement.index == m.focusedButton() && m.buttonsFocused {
+			// A shape change keeps keyboard focus visible without color.
+			label = "[▸" + placement.Label + " ]"
 			style = lipgloss.NewStyle().Background(mint).Foreground(lipgloss.Color("#102C2C")).Bold(true)
 		}
 		parts = append(parts, style.Render(label))
-		used += size + 1
 	}
 	return strings.Join(parts, " ")
 }
@@ -184,11 +216,18 @@ func (m *Model) browse(action Action) tea.Cmd {
 	return m.begin()
 }
 func (m *Model) activate(id string) tea.Cmd {
+	if id == "close-help" {
+		m.help, m.scroll, m.buttonsFocused = false, 0, false
+		return nil
+	}
 	if m.calendar != nil {
 		if m.calendarAction(id) {
 			return nil
 		}
 		if id == "review" {
+			if m.calendar.years && !m.calendar.chooseYear() {
+				return nil
+			}
 			m.applyDatePicker(m.calendar.day.Format("2006-01-02"))
 		} else {
 			m.closeDatePicker()
@@ -206,7 +245,12 @@ func (m *Model) activate(id string) tea.Cmd {
 			} else {
 				m.picker.addCustom()
 			}
+		case "picker-jobs-refresh":
+			return m.loadCronJobs()
 		case "picker-apply":
+			if m.picker.jobs {
+				return m.acceptCronJob()
+			}
 			m.applyPicker()
 		case "picker-cancel":
 			m.closePicker()
@@ -292,6 +336,8 @@ func (m *Model) activate(id string) tea.Cmd {
 	case "advanced":
 		m.advanced = !m.advanced
 		m.focus = 0
+	case "download-start":
+		return m.startDownload()
 	case "review":
 		m.prepareReview()
 	case "open":
@@ -366,10 +412,10 @@ func (m *Model) activate(id string) tea.Cmd {
 	return nil
 }
 func (m Model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
-	if msg.Button != tea.MouseLeft || m.help || m.searching {
+	if msg.Button != tea.MouseLeft || m.searching || m.width < 55 || m.height < 20 {
 		return m, nil
 	}
-	if m.pathDialog == nil && m.screen == configure {
+	if !m.help && m.pathDialog == nil && m.screen == configure {
 		if m.dateControlClick(msg) {
 			return m, nil
 		}
@@ -377,36 +423,23 @@ func (m Model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 			return m, command
 		}
 	}
-	if m.pathDialog == nil && m.editing && !m.saveInput() {
+	if !m.help && m.pathDialog == nil && m.editing && !m.saveInput() {
 		return m, nil
 	}
 	width, height := m.width-4, m.height-7
 	if msg.Y == 3+height-1 {
-		buttons := m.buttons()
-		start := 0
-		for start < m.buttonFocus {
-			size := 0
-			for i := start; i <= m.buttonFocus; i++ {
-				size += lipgloss.Width(buttons[i].Label) + 5
-			}
-			if size <= width {
-				break
-			}
-			start++
-		}
-		x := 2
-		for i := start; i < len(buttons); i++ {
-			size := lipgloss.Width(buttons[i].Label) + 4
-			if x+size > m.width-2 {
-				break
-			}
-			if msg.X >= x && msg.X < x+size {
-				m.buttonFocus = i
-				cmd := m.activate(buttons[i].ID)
+		for _, placement := range m.buttonLayout(width) {
+			x := 2 + placement.x
+			if msg.X >= x && msg.X < x+placement.width {
+				m.buttonFocus = placement.index
+				cmd := m.activate(placement.ID)
 				return m, cmd
 			}
-			x += size + 1
 		}
+		return m, nil
+	}
+	if m.help || msg.Y < 3 || msg.Y >= m.height-6 {
+		return m, nil
 	}
 	bodyHeight := height - 2
 	if m.pathDialog != nil {
@@ -436,14 +469,14 @@ func (m Model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		if width < 86 {
 			listHeight -= 2
 		}
-		rowHeight, _, start := m.actionListGeometry(listHeight)
+		rowHeight, page, start := m.actionListGeometry(listHeight)
 		listTop := 9
 		if width < 86 {
 			listTop += 2
 		}
 		index := start + (msg.Y-listTop)/rowHeight
 		actions := m.filteredActions()
-		if msg.Y >= listTop && index >= 0 && index < len(actions) {
+		if msg.Y >= listTop && index >= start && index < min(len(actions), start+page) {
 			m.selected = index
 			return m, m.activate("open")
 		}
@@ -478,7 +511,7 @@ func (m Model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		rowStart, page := m.resultListGeometry(bodyHeight)
 		start := max(0, m.resultSelected-page+1)
 		index := start + (msg.Y-3-rowStart)/2
-		if m.resultTab == 0 && msg.Y >= 3+rowStart && index >= 0 && index < len(rows) {
+		if m.resultTab == 0 && msg.Y >= 3+rowStart && index >= start && index < min(len(rows), start+page) {
 			m.resultSelected = index
 			m.buttonsFocused = false
 		}
@@ -488,6 +521,9 @@ func (m Model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) prepareReview() {
 	if m.calendar != nil {
+		if m.calendar.years && !m.calendar.chooseYear() {
+			return
+		}
 		m.applyDatePicker(m.calendar.day.Format("2006-01-02"))
 	}
 	if m.inlinePicker() {

@@ -9,14 +9,21 @@ import (
 
 type formGeometry struct {
 	top, rows, start, focus, extra     int
+	urlIndex                           int
 	labelWidth, controlX, controlWidth int
 }
 
 func (m Model) formLayout(width, height int) formGeometry {
-	g := formGeometry{top: 3, rows: max(1, height-6), focus: m.focus, labelWidth: min(27, width/3)}
+	g := formGeometry{urlIndex: -1, top: 3, rows: max(1, height-6), focus: m.focus, labelWidth: min(27, width/3)}
 	g.controlX = g.labelWidth + 2
 	g.controlWidth = width - g.controlX
 	fields := m.visibleFields()
+	for i, index := range fields {
+		if m.form.Fields[index].Type == "links" {
+			g.urlIndex = i
+			break
+		}
+	}
 	if m.inlinePicker() {
 		g.extra = min(7, max(1, g.rows-1))
 	} else if m.inlineCalendar() {
@@ -25,11 +32,21 @@ func (m Model) formLayout(width, height int) formGeometry {
 		g.extra = 1
 	}
 	g.start = max(0, m.focus-max(1, g.rows-g.extra)+1)
+	fieldHeight := 1
+	if g.focus == g.urlIndex {
+		fieldHeight = 3
+	}
+	for g.start < g.focus && g.fieldRow(g.focus)+fieldHeight+g.extra > g.rows {
+		g.start++
+	}
 	return g
 }
 
 func (g formGeometry) fieldRow(index int) int {
 	row := index - g.start
+	if g.urlIndex >= g.start && index > g.urlIndex {
+		row += 2
+	}
 	if index > g.focus {
 		row += g.extra
 	}
@@ -40,14 +57,16 @@ func (g formGeometry) fieldAtRow(row int) (int, bool) {
 	if row < 0 || row >= g.rows {
 		return 0, false
 	}
-	focusRow := g.focus - g.start
-	if row > focusRow && row <= focusRow+g.extra {
-		return 0, false
+	for index := g.start; g.fieldRow(index) < g.rows; index++ {
+		top, height := g.fieldRow(index), 1
+		if index == g.urlIndex {
+			height = 3
+		}
+		if row >= top && row < top+height {
+			return index, true
+		}
 	}
-	if row > focusRow {
-		row -= g.extra
-	}
-	return g.start + row, true
+	return 0, false
 }
 
 func (m Model) formView(width, height int) string {
@@ -62,6 +81,9 @@ func (m Model) formView(width, height int) string {
 		status = m.inputView(width, false)
 	} else if m.fieldSearch != "" {
 		status = fmt.Sprintf("Options matching %q · %d found", m.fieldSearch, len(fields))
+	}
+	if m.downloadForm() && !m.searching && m.fieldSearch == "" {
+		status = "Paste a Telegram link · Enter downloads · Tab for options"
 	}
 	lines := []string{titleStyle.Render(clip(m.form.Action.Title, width)), dim.Render(clip(status+" · Ctrl+F to find any option", width)), ""}
 	if len(fields) == 0 {
@@ -88,7 +110,11 @@ func (m Model) formView(width, height int) string {
 				value = calendarToolbar()
 			}
 		}
-		rows = append(rows, name+"  "+value)
+		if field.Type == "links" {
+			rows = append(rows, strings.Split(m.downloadURLBar(field, width, n == m.focus), "\n")...)
+		} else {
+			rows = append(rows, name+"  "+value)
+		}
 		if n == m.focus && g.extra > 0 {
 			control := ""
 			if m.inlinePicker() {
@@ -184,9 +210,18 @@ func (m Model) fieldHelp(field Field) string {
 }
 
 func (m Model) fieldHint(field Field) string {
+	if field.Type == "cron-job" {
+		if strings.Join(m.form.Action.Path, " ") == "cron logs" {
+			return "Enter or click a job to view its logs · Ctrl+L refresh"
+		}
+		return "Enter or click a job to review removal · Ctrl+L refresh"
+	}
+	if field.Type == "links" {
+		return "Enter downloads · Tab for options · Ctrl+R reviews first · Esc cancels edit"
+	}
 	if dateField(field) {
 		if m.calendar != nil {
-			return "Click a day or Enter to select · PgUp/PgDn changes month · Esc cancels"
+			return "Click month/year or press Y to change year · Enter selects · Esc cancels"
 		}
 		if m.editing {
 			return "Type a date/time · Calendar opens the picker · Tab saves · Esc undoes"
@@ -195,7 +230,7 @@ func (m Model) fieldHint(field Field) string {
 	}
 	if m.inlinePicker() && field.Name == "chat" && chatChoiceAction(m.form.Action.Path) {
 		if m.picker.loading {
-			return selectedStyle.Render("[Stop loading]") + " " + m.picker.loadStage
+			return selectedStyle.Render("[Stop loading]") + " " + m.loader.View() + " " + m.picker.loadStage
 		}
 		return selectedStyle.Render("[Reload chats]") + " Enter toggles · ← saves · Ctrl+L reloads"
 	}

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	managedcron "github.com/mo1ein/TelegramArchive/internal/cron"
 	"maps"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -41,7 +43,7 @@ func runTUI(cmd *cobra.Command, _ []string) error {
 	if _, configured := productSetting("STORAGE"); !configured && !cmd.Flags().Changed("storage") {
 		storage = defaultProductStorage(consts.HomeDir)
 	}
-	model := tui.New(tui.Catalog(root), inheritedArguments(cmd), viper.GetString("ns"), taskCtx,
+	model := tui.New(tui.Catalog(root), inheritedArguments(cmd), viper.GetString("ns"), taskCtx, tui.WithVersion(tuiVersion(root.Version)),
 		tui.WithAccountLoader(func(ctx context.Context, override string) ([]string, error) {
 			if err := ctx.Err(); err != nil {
 				return nil, err
@@ -61,7 +63,7 @@ func runTUI(cmd *cobra.Command, _ []string) error {
 				}
 			}
 			return tuiSavedAccounts(options)
-		}))
+		}), tui.WithCronJobLoader(tuiCronJobs(managedcron.Manager{Directory: filepath.Join(consts.DataDir, "cron"), Table: managedcron.CommandTable{}})))
 	_, err := tea.NewProgram(model, tea.WithContext(cmd.Context()), tea.WithInput(cmd.InOrStdin()), tea.WithOutput(cmd.OutOrStdout())).Run()
 	return err
 }
