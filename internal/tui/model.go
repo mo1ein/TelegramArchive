@@ -41,6 +41,8 @@ type Model struct {
 	cursor                             int
 	editor                             textinput.Model
 	meter                              progress.Model
+	downloads                          []downloadTransfer
+	downloadsStarted                   bool
 	loader                             spinner.Model
 	status                             *taskui.Progress
 	outputRevision                     uint64
@@ -242,10 +244,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.job != nil {
 			m.job.mu.Lock()
 			if m.job.resize != nil {
-				m.job.resize(max(20, m.width-6), max(5, m.height-17))
+				m.job.resize(m.plan.terminalSize(m.width-6, m.height-17))
 			}
-			m.job.terminal.width = max(20, min(m.width-6, 500))
-			m.job.terminal.height = max(5, min(m.height-17, 200))
+			m.job.terminal.width, m.job.terminal.height = m.plan.terminalSize(m.width-6, m.height-17)
 			m.job.mu.Unlock()
 		}
 		return m, nil
@@ -255,7 +256,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var command tea.Cmd
 		m.meter, command = m.meter.Update(msg)
-		return m, command
+		commands := []tea.Cmd{command}
+		for i := range m.downloads {
+			m.downloads[i].meter, command = m.downloads[i].meter.Update(msg)
+			commands = append(commands, command)
+		}
+		return m, tea.Batch(commands...)
 	case startedMsg:
 		m.job = msg.job
 		if m.cancelling {
@@ -264,11 +270,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.started = msg.job.started
 		msg.job.mu.Lock()
 		if msg.job.resize != nil {
-			msg.job.resize(max(20, m.width-6), max(5, m.height-17))
+			msg.job.resize(m.plan.terminalSize(m.width-6, m.height-17))
 		}
 		msg.job.mu.Unlock()
 		return m, poll()
 	case pollMsg:
+		var animations []tea.Cmd
 		if m.job == nil {
 			return m, nil
 		}
@@ -276,6 +283,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.job.mu.Lock()
 		if !m.syncedOutput || m.outputRevision != m.job.revision {
 			m.output = redactOutput(m.job.terminal.text())
+			if m.plan.downloadProgress() {
+				animations = m.syncDownloadProgress()
+			}
 			m.progress = append([]string(nil), m.job.terminal.progress...)
 			if m.job.terminal.status != nil {
 				status := *m.job.terminal.status
@@ -345,9 +355,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.status != nil && m.status.Determinate && m.meter.Percent() != m.status.Percent {
-			return m, tea.Batch(poll(), m.meter.SetPercent(m.status.Percent))
+			animations = append(animations, m.meter.SetPercent(m.status.Percent))
 		}
-		return m, poll()
+		return m, tea.Batch(append(animations, poll())...)
 	case inputErrorMsg:
 		if msg.err != nil {
 			m.err = msg.err.Error()

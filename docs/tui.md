@@ -257,6 +257,13 @@ total is known. They do not show a guessed percentage. Activity output updates
 without taking over the terminal. When a task finishes, its result stays visible;
 there is no extra Enter-to-return prompt.
 
+URL downloads use matching animated Bubbles bars for each active file, with
+percentage, transferred bytes, speed and ETA when the downloader reports them.
+The panel adapts to terminal height and shows how many additional files are
+active. Connecting and unknown file sizes show a spinner without an invented
+percentage. Prompts, completed transfers and errors remain in Activity; HTTP
+serve mode retains its normal activity display.
+
 If a login or another task asks for input, choose **Respond** or press `i`.
 Type into the displayed prompt and press Enter. Password prompts mask their
 input; account choices accept arrow keys. Press Esc to return to workspace
