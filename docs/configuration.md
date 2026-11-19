@@ -16,6 +16,10 @@ of native [Telegram for macOS](https://macos.telegram.org/), including the websi
 download. It discovers the installed client's data without changing the default
 login method.
 
+If you plan to keep the Telegram app open while using `ta`, log in with QR or
+phone/code. Desktop import shares the app's authorization key. See
+[Telegram stops updating while ta is running](troubleshooting.md#telegram-stops-updating-while-ta-is-running).
+
 For the native website client on macOS, follow the
 [macOS login guide](macos.md) for Full Disk Access and the full import process.
 Verify its session before saving a login, using an explicit path to select it
