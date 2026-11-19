@@ -13,7 +13,7 @@ func customChoices(field Field) bool {
 	return field.Multi && (field.AllowCustom || len(field.Choices) == 0) && field.PathKind == "" && field.Type != "accounts" && !field.Secret
 }
 func choiceField(field Field) bool {
-	return len(field.Choices) > 0 || field.Type == "accounts" || customChoices(field)
+	return len(field.Choices) > 0 || field.Type == "cron-job" || field.Type == "accounts" || customChoices(field)
 }
 func (m Model) inlinePicker() bool { return m.screen == configure && m.picker != nil }
 
@@ -26,6 +26,9 @@ func (b choiceBounds) contains(x, y int) bool {
 // The dropdown is attached to the argument's value column and has its own
 // bounded viewport. Rendering, mouse hit testing and wheel routing share it.
 func (m Model) inlineChoiceBounds() choiceBounds {
+	if m.chatFinder() {
+		return choiceBounds{2, 5, m.width - 4, max(4, m.height-12)}
+	}
 	g := m.formLayout(m.width-4, m.height-9)
 	return choiceBounds{2 + g.controlX, 3 + g.top + g.fieldRow(m.focus) + 1, min(60, g.controlWidth), g.extra}
 }
@@ -50,6 +53,9 @@ func choiceListWindow(height, count, cursor, offset int) choiceWindow {
 type choiceAction struct{ id, label string }
 
 func inlineChoiceActions(p *choicePicker) []choiceAction {
+	if p.jobs {
+		return []choiceAction{{"picker-jobs-refresh", "Refresh"}, {"picker-apply", "Choose"}}
+	}
 	if len(p.choices) == 0 && p.field == "ns" {
 		return []choiceAction{{"picker-connect", "Connect account"}, {"picker-refresh", "Refresh"}}
 	}
@@ -97,7 +103,19 @@ func (m Model) inlineChoicesView(_ Field, width, height int) string {
 	frame := lipgloss.NewStyle().Foreground(border)
 	query := p.query
 	query.SetWidth(max(1, inner-3))
-	lines := []string{frame.Render("╭" + strings.Repeat("─", inner) + "╮"), frame.Render("│") + fit(dim.Render("⌕ ")+query.View(), inner, 1) + frame.Render("│")}
+	heading := ""
+	if p.loading {
+		heading = " " + m.loader.View() + " Loading chats"
+		if p.jobs {
+			heading = " Loading jobs… "
+		}
+		if p.loadedChats > 0 {
+			heading += fmt.Sprintf(" · %d", p.loadedChats)
+		}
+		heading += " "
+	}
+	heading = clip(heading, inner)
+	lines := []string{frame.Render("╭") + heading + frame.Render(strings.Repeat("─", max(0, inner-lipgloss.Width(heading)))+"╮"), frame.Render("│") + fit(dim.Render("⌕ ")+query.View(), inner, 1) + frame.Render("│")}
 	for row := range w.rows {
 		index := w.start + row
 		value := ""
@@ -127,6 +145,15 @@ func (m Model) inlineChoicesView(_ Field, width, height int) string {
 			} else if p.selectedOnly {
 				value = "No selected items"
 			}
+			if p.loading {
+				value = "Waiting for matching chats…"
+			}
+			if p.jobs && len(p.choices) == 0 {
+				value = "No scheduled jobs"
+				if p.loading {
+					value = "Loading jobs…"
+				}
+			}
 			if len(p.choices) == 0 && p.field == "ns" {
 				value = "No saved accounts"
 			}
@@ -153,7 +180,11 @@ func (m *Model) inlineChoiceClick(msg tea.MouseClickMsg) (bool, tea.Cmd) {
 	if !m.inlinePicker() {
 		return false, nil
 	}
-	if m.picker.field == "chat" && chatChoiceAction(m.form.Action.Path) && msg.Y == m.height-8 && msg.X >= 2 && msg.X < 16 {
+	statusY := m.height - 8
+	if m.chatFinder() {
+		statusY = m.height - 7
+	}
+	if m.picker.field == "chat" && chatChoiceAction(m.form.Action.Path) && msg.Y == statusY && msg.X >= 2 && msg.X < 16 {
 		if m.picker.loading {
 			m.stopChatLookup()
 			return true, nil
@@ -204,6 +235,9 @@ func (m *Model) inlineChoiceClick(msg tea.MouseClickMsg) (bool, tea.Cmd) {
 		p.query.Blur()
 		p.toggle(rows[index])
 		if !p.multi {
+			if p.jobs {
+				return true, m.acceptCronJob()
+			}
 			m.applyPicker()
 		}
 	}

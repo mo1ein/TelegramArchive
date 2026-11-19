@@ -236,3 +236,132 @@ func BenchmarkTaskPolling(b *testing.B) {
 		})
 	}
 }
+
+func TestActionBarHandlesChangedActionsAndShowsFocusWithoutColor(t *testing.T) {
+	root, action := fixture()
+	m := New(Catalog(root), nil, "default", context.Background())
+	m.open(action)
+	m.buttonsFocused, m.buttonFocus = true, 20 // A previous result had more actions.
+	view := ansi.Strip(m.View().Content)
+	if !strings.Contains(view, "[▸More options ]") {
+		t.Fatal("focus must remain visible when the available actions shrink")
+	}
+	m = update(m, key(tea.KeyEnter, ""))
+	if !m.advanced {
+		t.Fatal("Enter did not activate the visibly focused action")
+	}
+}
+
+func TestScrolledActionBarMouseMatchesVisibleButtons(t *testing.T) {
+	root, _ := fixture()
+	for _, width := range []int{55, 80, 120} {
+		m := New(Catalog(root), nil, "default", context.Background())
+		m.width, m.height, m.screen = width, 24, result
+		m.data = resultData{Kind: "chat ls", Items: []item{{ID: "42", Title: "Example"}}}
+		m.buttonsFocused, m.buttonFocus = true, len(m.buttons())-1
+		view := ansi.Strip(m.View().Content)
+		found := false
+		for y, line := range strings.Split(view, "\n") {
+			if at := strings.Index(line, "[▸Home ]"); at >= 0 {
+				x := ansi.StringWidth(line[:at]) + 2
+				m = update(m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+				if m.screen != dashboard {
+					t.Fatalf("visible Home button did not respond at width %d", width)
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("focused Home button hidden at width %d", width)
+		}
+	}
+}
+
+func TestHelpHasClickableCloseAndDoesNotActivateUnderlyingForm(t *testing.T) {
+	root, action := fixture()
+	m := New(Catalog(root), nil, "default", context.Background())
+	m.open(action)
+	m = update(m, key('?', "?"))
+	if !strings.Contains(ansi.Strip(m.View().Content), "Close guide") {
+		t.Fatal("help must offer its own close action")
+	}
+	m = update(m, tea.MouseClickMsg{X: 30, Y: 7, Button: tea.MouseLeft})
+	if !m.help || m.editing || m.picker != nil || m.calendar != nil {
+		t.Fatal("help click activated the underlying form")
+	}
+	m = update(m, tea.MouseClickMsg{X: 5, Y: m.height - 5, Button: tea.MouseLeft})
+	if m.help || m.screen != configure {
+		t.Fatal("Close guide did not restore the form")
+	}
+}
+
+func TestDashboardPositionIndicatorIsNotAnInvisibleWorkflow(t *testing.T) {
+	_, action := fixture()
+	var actions []Action
+	for i := range 20 {
+		copy := action
+		copy.Group, copy.Title = "Quick start", fmt.Sprintf("Workflow %d", i)
+		actions = append(actions, copy)
+	}
+	for _, width := range []int{55, 80, 120} {
+		m := New(actions, nil, "default", context.Background())
+		m.width, m.height = width, 24
+		for y, line := range strings.Split(ansi.Strip(m.View().Content), "\n") {
+			if strings.Contains(line, "1 / 20") {
+				m = update(m, tea.MouseClickMsg{X: width - 8, Y: y, Button: tea.MouseLeft})
+				if m.screen != dashboard {
+					t.Fatalf("position indicator opened a hidden workflow at width %d", width)
+				}
+			}
+		}
+	}
+}
+
+func TestWorkspaceScreensFitTerminalAndIdentifyCurrentStep(t *testing.T) {
+	root, action := fixture()
+	for _, size := range [][2]int{{55, 20}, {80, 24}, {120, 40}, {30, 8}} {
+		m := New(Catalog(root), nil, "default", context.Background(), WithVersion("v1.2.3"))
+		m.width, m.height = size[0], size[1]
+		m.open(action)
+		for _, screen := range []screen{dashboard, configure, review, running, result} {
+			m.screen = screen
+			view := ansi.Strip(m.View().Content)
+			if len(strings.Split(view, "\n")) > m.height {
+				t.Fatalf("screen %v overflows height %d", screen, m.height)
+			}
+			for _, line := range strings.Split(view, "\n") {
+				if ansi.StringWidth(line) > m.width {
+					t.Fatalf("screen %v overflows width %d: %q", screen, m.width, line)
+				}
+			}
+			if m.width >= 55 && (!strings.Contains(view, m.screenLabel()) || !strings.Contains(view, "v1.2.3")) {
+				t.Fatal("current step is missing")
+			}
+		}
+	}
+}
+
+func TestHelpCanCloseWhileChatsAreLoading(t *testing.T) {
+	m := New(nil, nil, "default", context.Background())
+	m.screen, m.loading, m.help = result, true, true
+	m = update(m, tea.MouseClickMsg{X: 5, Y: m.height - 5, Button: tea.MouseLeft})
+	if m.help || !m.loading || m.err != "" {
+		t.Fatal("closing help must leave the chat lookup running")
+	}
+}
+
+func TestSearchFindsQuickStartPresetsByTheirVisibleTitle(t *testing.T) {
+	_, action := fixture()
+	action.Group, action.Title = "Quick start", "Back up Saved Messages"
+	m := New([]Action{action}, nil, "default", context.Background())
+	m.search = action.Title
+	found := m.filteredActions()
+	if len(found) != 1 || found[0].Title != action.Title {
+		t.Fatal("search excluded a visible Quick start workflow")
+	}
+	m.group, m.search = slices.Index(Groups, "All commands"), ""
+	if len(m.filteredActions()) != 0 {
+		t.Fatal("the unfiltered command library should still exclude presets")
+	}
+}

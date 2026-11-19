@@ -193,3 +193,93 @@ func TestSmallCalendarButtonsReturnSafelyToTheForm(t *testing.T) {
 		}
 	}
 }
+
+func TestCalendarYearCanBeTypedOrPastedAndClampsLeapDay(t *testing.T) {
+	for _, paste := range []bool{false, true} {
+		m := datePickerModel(t, "since", "2028-02-29")
+		m = update(m, key(tea.KeyEnter, ""))
+		m = update(m, key('y', "y"))
+		if !m.calendar.years {
+			t.Fatal("Y did not open the year picker")
+		}
+		if paste {
+			m = update(m, tea.PasteMsg{Content: "1999"})
+		} else {
+			for _, digit := range "1999" {
+				m = update(m, key(digit, string(digit)))
+			}
+		}
+		m = update(m, key(tea.KeyEnter, ""))
+		if m.calendar == nil || m.calendar.years || m.calendar.day.Format("2006-01-02") != "1999-02-28" {
+			t.Fatal("direct year selection did not preserve month and clamp the day")
+		}
+		if m.form.field("since").Value != "2028-02-29" {
+			t.Fatal("year navigation prematurely saved the date")
+		}
+		m = update(m, key(tea.KeyEnter, ""))
+		if m.form.field("since").Value != "1999-02-28" {
+			t.Fatal("chosen year did not reach the form")
+		}
+	}
+}
+
+func TestCalendarYearGridMouseWorksAtEverySupportedSize(t *testing.T) {
+	for _, size := range [][2]int{{55, 20}, {80, 24}, {55, 25}, {110, 32}} {
+		m := datePickerModel(t, "until", "2026-11-14")
+		m.width, m.height = size[0], size[1]
+		m = update(m, key(tea.KeyEnter, ""))
+		m = clickChoiceText(t, m, "November 2026")
+		if !m.calendar.years {
+			t.Fatal("clicking the heading did not open year selection")
+		}
+		for _, line := range strings.Split(ansi.Strip(m.View().Content), "\n") {
+			if ansi.StringWidth(line) > m.width {
+				t.Fatal("year grid overflow")
+			}
+		}
+		m = clickChoiceText(t, m, "‹")
+		if m.calendar.yearCursor != 2006 {
+			t.Fatal("year arrow must page by 20 years")
+		}
+		b := m.calendarBounds()
+		m = update(m, tea.MouseClickMsg{X: b.x + 1 + 2*7, Y: b.y + 2, Button: tea.MouseLeft})
+		if m.calendar.years || m.calendar.day.Year() != 2002 {
+			t.Fatal("year cell hit area disagrees with displayed grid")
+		}
+		m = update(m, key(tea.KeyEscape, ""))
+		if m.form.field("until").Value != "2026-11-14" {
+			t.Fatal("cancelling should keep the saved date")
+		}
+	}
+}
+
+func TestCalendarYearValidationCancellationAndReview(t *testing.T) {
+	for _, value := range []string{"0", "10000", "not a year"} {
+		m := datePickerModel(t, "since", "2026-11-14")
+		m = update(m, key(tea.KeyEnter, ""))
+		m = update(m, key('y', "y"))
+		m = update(m, tea.PasteMsg{Content: value})
+		m = update(m, key('r', "", tea.ModCtrl))
+		if m.screen != configure || m.calendar == nil || !m.calendar.years || m.calendar.yearError == "" {
+			t.Fatalf("invalid year %q escaped validation", value)
+		}
+		m = update(m, key(tea.KeyEscape, ""))
+		if m.calendar == nil || m.calendar.years || m.calendar.day.Year() != 2026 {
+			t.Fatal("Escape must discard year typing and return to days")
+		}
+	}
+	for _, mouse := range []bool{false, true} {
+		m := datePickerModel(t, "since", "2026-11-14")
+		m = update(m, key(tea.KeyEnter, ""))
+		m = update(m, key('y', "y"))
+		m = update(m, tea.PasteMsg{Content: "2010"})
+		if mouse {
+			m = clickChoiceText(t, m, "[ Review ]")
+		} else {
+			m = update(m, key('r', "", tea.ModCtrl))
+		}
+		if m.screen != review || !slices.Contains(m.plan.Args, "--since=2010-11-14") {
+			t.Fatal("review lost the pending year")
+		}
+	}
+}

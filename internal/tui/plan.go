@@ -36,7 +36,7 @@ func (f Form) Plan(base []string) (Plan, error) {
 		if field.Name == "ns" && field.Type == "accounts" {
 			continue
 		}
-		if field.Type == "arguments" {
+		if field.Type == "arguments" || field.Type == "cron-job" {
 			var err error
 			positionals, err = shellquote.Split(field.Value)
 			if err != nil {
@@ -53,7 +53,15 @@ func (f Form) Plan(base []string) (Plan, error) {
 		if err := validate(field); err != nil {
 			return plan, field.Error(err)
 		}
-		args := []string{"--" + field.Name + "=" + field.Value}
+		value := field.Value
+		if field.Type == "links" {
+			links, err := downloadURLs(value)
+			if err != nil {
+				return plan, field.Error(err)
+			}
+			value = csvString(links)
+		}
+		args := []string{"--" + field.Name + "=" + value}
 		if field.Type == "stringArray" {
 			args = nil
 			values, err := readCSV(field.Value)
@@ -80,6 +88,17 @@ func (f Form) Plan(base []string) (Plan, error) {
 		return ""
 	}
 	path := strings.Join(f.Action.Path, " ")
+	if path == "download" {
+		if strings.TrimSpace(value("url")) == "" && strings.TrimSpace(value("file")) == "" {
+			return plan, fmt.Errorf("paste a Telegram message link, or choose an exported file in More options")
+		}
+		if value("include") != "" && value("exclude") != "" {
+			return plan, fmt.Errorf("choose Only extensions or Exclude extensions, not both")
+		}
+		if value("continue") == "true" && value("restart") == "true" {
+			return plan, fmt.Errorf("choose Continue previous download or Restart previous download, not both")
+		}
+	}
 	if path == "archive" || path == "sync" || path == "cron add" {
 		if value("all") == "true" && value("chat") != "" {
 			return plan, fmt.Errorf("choose all chats or specific chats; clear one of these options")
@@ -107,6 +126,8 @@ func (f Form) Plan(base []string) (Plan, error) {
 func validate(field Field) error {
 	var err error
 	switch field.Type {
+	case "links":
+		_, err = downloadURLs(field.Value)
 	case "bool":
 		_, err = strconv.ParseBool(field.Value)
 	case "int", "int8", "int16", "int32", "int64", "count":

@@ -29,16 +29,32 @@ func (m Model) View() tea.View {
 	w, h := m.width, m.height
 	var content string
 	if w < 55 || h < 20 {
-		content = "ta · Telegram Archive\n\nResize to at least 55 × 20.\nCtrl+C to exit."
+		hint := "Ctrl+C to exit."
+		if m.screen == running || m.loading {
+			hint = "Task active · Ctrl+C to cancel."
+		}
+		content = fit("ta · Telegram Archive\n\nResize to at least 55 × 20.\n"+hint, max(1, w), max(1, h))
 	} else {
 		width, height := w-4, h-9
-		header := badge.Render("ta") + "  " + titleStyle.Render("TELEGRAM ARCHIVE") + dim.Render("  /  your workspace")
+		right := ""
 		if w >= 85 {
 			namespace := m.globals["ns"]
 			if namespace == "" {
 				namespace = "inherited"
 			}
-			right := dim.Render("account ") + accent.Render(clip(namespace, 18))
+			right = dim.Render("account ") + accent.Render(clip(namespace, 18))
+		}
+		header := badge.Render("ta") + "  " + titleStyle.Render("TELEGRAM ARCHIVE")
+		location := dim.Render("  /  " + m.screenLabel())
+		available := width - lipgloss.Width(header) - lipgloss.Width(location) - 1
+		if right != "" {
+			available -= lipgloss.Width(right) + 2
+		}
+		if m.version != "" && available > 0 {
+			header += " " + dim.Render(clip(m.version, min(20, available)))
+		}
+		header += location
+		if right != "" {
 			header += strings.Repeat(" ", max(1, width-lipgloss.Width(header)-lipgloss.Width(right))) + right
 		}
 		var body string
@@ -46,6 +62,8 @@ func (m Model) View() tea.View {
 			body = m.pathDialogView(width, height)
 		} else if m.calendar != nil && !m.inlineCalendar() {
 			body = m.datePickerView()
+		} else if m.chatFinder() {
+			body = m.chatFinderView(width, height)
 		} else if m.picker != nil && !m.inlinePicker() {
 			body = m.pickerView(width, height)
 		} else if m.help {
@@ -75,6 +93,24 @@ func (m Model) View() tea.View {
 	}
 	view.WindowTitle = "ta · Telegram Archive"
 	return view
+}
+
+func (m Model) screenLabel() string {
+	if m.help {
+		return "Keyboard guide"
+	}
+	switch m.screen {
+	case configure:
+		return "1 Settings"
+	case review:
+		return "2 Review"
+	case running:
+		return "3 Progress"
+	case result:
+		return "Results"
+	default:
+		return "Workspace"
+	}
 }
 
 func (m Model) dashboardView(width, height int) string {
@@ -167,7 +203,7 @@ func (m Model) reviewView(width, height int) string {
 		if !field.Dirty && field.Advanced {
 			continue
 		}
-		lines = append(lines, dim.Render(field.Label+"  ")+textStyle.Render(clip(field.Display(), max(1, width-len(field.Label)-2))))
+		lines = append(lines, dim.Render(field.Label+"  ")+textStyle.Render(clip(field.Display(), max(1, width-lipgloss.Width(field.Label)-2))))
 	}
 	if len(lines) == 4 {
 		lines = append(lines, dim.Render("Using the default settings for this workflow."))
@@ -198,13 +234,19 @@ func (m Model) helpView(width, height int) string {
 
 func (m Model) footer() string {
 	if m.calendar != nil {
-		return accent.Render("Enter choose · Esc cancel") + dim.Render("   Arrows day   PgUp/PgDn month   I type")
+		if m.calendar.years {
+			return accent.Render("Type year · Enter choose · Esc back") + dim.Render("   Arrows year   PgUp/PgDn 20 years")
+		}
+		return accent.Render("Y year · Enter choose · Esc cancel") + dim.Render("   PgUp/PgDn month   I type")
 	}
 	if m.pathDialog != nil {
 		if m.pathDialog.browser == nil {
 			return accent.Render("Choose in the system dialog") + dim.Render("   Esc cancel")
 		}
 		return accent.Render("Enter open · Space select") + dim.Render("   Tab actions   Type to filter   Ctrl+H hidden   Esc cancel")
+	}
+	if m.chatFinder() {
+		return accent.Render("Enter/Space toggle · Ctrl+Enter apply") + dim.Render("   Tab next   Esc cancel")
 	}
 	if m.picker != nil {
 		if m.inlinePicker() {
@@ -220,6 +262,12 @@ func (m Model) footer() string {
 	}
 	if m.help {
 		return dim.Render("↑↓ scroll   Esc / ? close guide")
+	}
+	if m.buttonsFocused && !m.editing && !m.searching {
+		return accent.Render(fmt.Sprintf("Action %d of %d", m.focusedButton()+1, len(m.buttons()))) + dim.Render("   ←/→ choose   Enter activate   F6 panel")
+	}
+	if m.editing && m.editingDownloadURL() {
+		return accent.Render("Enter download") + dim.Render("   Tab options   Ctrl+R review   Esc undo")
 	}
 	if m.editing {
 		if fields := m.visibleFields(); m.screen == configure && len(fields) > 0 && m.focus < len(fields) && m.form.Fields[fields[m.focus]].PathKind != "" {
